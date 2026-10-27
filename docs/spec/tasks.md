@@ -6,9 +6,9 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T0.1 `requirements.md`, `design.md`, `tasks.md` e ADRs 0001–0004
 
 ## Fase 1 — Fundação
-- [ ] T1.1 Projeto Maven (wrapper, Java 21, Spring Boot 3.5), `.gitignore`, `.editorconfig` — R10.1
-- [ ] T1.2 Migração Flyway V1 com tabela, constraints e índices — R4.1, R3.4, R10.4
-- [ ] T1.3 Base de teste de integração com Testcontainers (PostgreSQL) + teste de contexto — R10.1
+- [x] T1.1 Projeto Maven (wrapper, Java 21, Spring Boot 3.5), `.gitignore`, `.editorconfig` — R10.1
+- [x] T1.2 Migração Flyway V1 com tabela, constraints e índices — R4.1, R3.4, R10.4
+- [x] T1.3 Base de teste de integração com Testcontainers (PostgreSQL) + teste de contexto — R10.1
 
 **Checkpoint 1:** a estrutura do projeto e o esquema do banco.
 
