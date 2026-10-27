@@ -107,7 +107,7 @@ CREATE TABLE activation_request (
 ## 5. Criação e duplicidade (R1, R4, ADR-0002)
 
 ```
-CreateActivationRequestService.create(cmd, clientId)
+ActivationRequestService.create(cmd, clientId)
   1. tenta INSERT (repository.saveAndFlush, transação curta e própria)
        ok  → 201 Created
   2. DataIntegrityViolationException na constraint uk_activation_request_external_id

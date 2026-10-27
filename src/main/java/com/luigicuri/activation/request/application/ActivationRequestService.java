@@ -1,9 +1,17 @@
 package com.luigicuri.activation.request.application;
 
+import static com.luigicuri.activation.request.persistence.ActivationRequestSpecifications.hasCustomerId;
+import static com.luigicuri.activation.request.persistence.ActivationRequestSpecifications.hasStatus;
+import static com.luigicuri.activation.request.persistence.ActivationRequestSpecifications.ownedBy;
+
 import java.time.Clock;
 import java.util.UUID;
 
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.jpa.domain.Specification;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -67,5 +75,19 @@ public class ActivationRequestService {
     public ActivationRequest get(UUID id, String clientId) {
         return repository.findByIdAndClientId(id, clientId)
                 .orElseThrow(() -> new ActivationRequestNotFoundException(id));
+    }
+
+    /** Newest first; id breaks ties so pages stay stable when timestamps collide. */
+    @Transactional(readOnly = true)
+    public Page<ActivationRequest> list(ActivationRequestQuery query, String clientId) {
+        Specification<ActivationRequest> filter = ownedBy(clientId);
+        if (query.status() != null) {
+            filter = filter.and(hasStatus(query.status()));
+        }
+        if (query.customerId() != null) {
+            filter = filter.and(hasCustomerId(query.customerId()));
+        }
+        var sort = Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"));
+        return repository.findAll(filter, PageRequest.of(query.page(), query.size(), sort));
     }
 }

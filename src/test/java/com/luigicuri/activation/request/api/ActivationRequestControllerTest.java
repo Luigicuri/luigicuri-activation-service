@@ -16,6 +16,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
@@ -23,16 +24,20 @@ import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import com.luigicuri.activation.request.application.ActivationRequestNotFoundException;
+import com.luigicuri.activation.request.application.ActivationRequestQuery;
 import com.luigicuri.activation.request.application.ActivationRequestService;
 import com.luigicuri.activation.request.application.CreateActivationRequestCommand;
 import com.luigicuri.activation.request.application.CreationResult;
 import com.luigicuri.activation.request.application.DuplicateActivationRequestException;
 import com.luigicuri.activation.request.domain.ActivationRequest;
+import com.luigicuri.activation.request.domain.ActivationStatus;
 import com.luigicuri.activation.shared.security.CurrentClient;
 
 /** Web layer only: HTTP contract, validation and error format (R1, R2, R7). The service is mocked. */
@@ -181,6 +186,54 @@ class ActivationRequestControllerTest {
             mockMvc.perform(get("/api/v1/requests/{id}", "not-a-uuid"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/not-found"));
+        }
+    }
+
+    @Nested
+    class Listing {
+
+        @Test
+        void filtersAndPaginationAreForwardedToTheService() throws Exception {
+            var existing = request();
+            var query = new ActivationRequestQuery(ActivationStatus.PENDING, "CUST-10001", 2, 5);
+            given(service.list(query, CLIENT))
+                    .willReturn(new PageImpl<>(List.of(existing), PageRequest.of(2, 5), 11));
+
+            mockMvc.perform(get("/api/v1/requests")
+                            .param("status", "PENDING")
+                            .param("customerId", "CUST-10001")
+                            .param("page", "2")
+                            .param("size", "5"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[0].id").value(existing.getId().toString()))
+                    .andExpect(jsonPath("$.page").value(2))
+                    .andExpect(jsonPath("$.size").value(5))
+                    .andExpect(jsonPath("$.totalElements").value(11))
+                    .andExpect(jsonPath("$.totalPages").value(3));
+        }
+
+        @Test
+        void invalidStatusReturns400() throws Exception {
+            mockMvc.perform(get("/api/v1/requests").param("status", "DONE"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.errors[0].field").value("status"));
+        }
+
+        @Test
+        void sizeAboveMaximumReturns400() throws Exception {
+            mockMvc.perform(get("/api/v1/requests").param("size", "101"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/validation-error"))
+                    .andExpect(jsonPath("$.errors[0].field").value("size"))
+                    .andExpect(jsonPath("$.errors[0].message").value("must be between 1 and 100"));
+        }
+
+        @Test
+        void negativePageReturns400() throws Exception {
+            mockMvc.perform(get("/api/v1/requests").param("page", "-1"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.errors[0].field").value("page"));
         }
     }
 

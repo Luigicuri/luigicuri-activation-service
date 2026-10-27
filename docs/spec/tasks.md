@@ -13,11 +13,11 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 **Checkpoint 1:** a estrutura do projeto e o esquema do banco.
 
 ## Fase 2 — Domínio e API
-- [ ] T2.1 Entidade `ActivationRequest` + `ActivationStatus` + transições + teste unitário — R6
-- [ ] T2.2 Repositório + `POST` (criação simples) + `GET /{id}` + DTOs (records) — R1, R2
-- [ ] T2.3 Filtro de correlação + tratamento de erros com ProblemDetail — R7, R9.2
-- [ ] T2.4 Duplicidade: os três ramos (B-i) + teste unitário + teste concorrente com Testcontainers — R4
-- [ ] T2.5 Listagem paginada com filtros — R3
+- [x] T2.1 Entidade `ActivationRequest` + `ActivationStatus` + transições + teste unitário — R6
+- [x] T2.2 Repositório + `POST` (criação simples) + `GET /{id}` + DTOs (records) — R1, R2
+- [x] T2.3 Filtro de correlação + tratamento de erros com ProblemDetail — R7, R9.2
+- [x] T2.4 Duplicidade: os três ramos (B-i) + teste unitário + teste concorrente com Testcontainers — R4
+- [x] T2.5 Listagem paginada com filtros — R3
 
 **Checkpoint 2:** domínio, API, erros e duplicidade (o núcleo da avaliação).
 
