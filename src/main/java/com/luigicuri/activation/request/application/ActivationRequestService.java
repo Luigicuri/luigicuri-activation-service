@@ -8,6 +8,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.persistence.ActivationRequestRepository;
+import com.luigicuri.activation.shared.correlation.CorrelationId;
 
 @Service
 public class ActivationRequestService {
@@ -22,7 +23,7 @@ public class ActivationRequestService {
 
     public CreationResult create(CreateActivationRequestCommand command, String clientId) {
         var request = ActivationRequest.create(command.externalId(), command.customerId(),
-                command.productCode(), clientId, null, clock.instant());
+                command.productCode(), clientId, CorrelationId.current(), clock.instant());
         return new CreationResult.Created(repository.saveAndFlush(request));
     }
 

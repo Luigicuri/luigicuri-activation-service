@@ -18,3 +18,7 @@ spring:
 
 server:
   shutdown: graceful
+
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
