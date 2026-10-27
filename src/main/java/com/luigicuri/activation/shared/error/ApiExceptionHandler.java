@@ -22,6 +22,7 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
 import com.luigicuri.activation.request.application.ActivationRequestNotFoundException;
+import com.luigicuri.activation.request.application.DuplicateActivationRequestException;
 import com.luigicuri.activation.shared.correlation.CorrelationId;
 
 /**
@@ -38,6 +39,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler(ActivationRequestNotFoundException.class)
     ResponseEntity<Object> handleNotFound(ActivationRequestNotFoundException ex) {
         return respond(problem(HttpStatus.NOT_FOUND, "not-found", "Resource not found", ex.getMessage()));
+    }
+
+    @ExceptionHandler(DuplicateActivationRequestException.class)
+    ResponseEntity<Object> handleDuplicate(DuplicateActivationRequestException ex) {
+        return respond(problem(HttpStatus.CONFLICT, "duplicate-request", "Duplicate request", ex.getMessage()));
     }
 
     @ExceptionHandler(Exception.class)

@@ -66,6 +66,44 @@ class ActivationRequestApiIT {
         assertThat(response.getHeader("Location")).endsWith("/api/v1/requests/" + id);
     }
 
+    @Test
+    void retryWithSameContentReturns200WithTheSameRequest() throws Exception {
+        var first = mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-RETRY", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-RETRY", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value((String) JsonPath.read(first, "$.id")));
+
+        assertThat(countByExternalId("EXT-RETRY")).isEqualTo(1);
+    }
+
+    @Test
+    void sameExternalIdWithDifferentContentReturns409() throws Exception {
+        mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-CONFLICT", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-CONFLICT", "CUST-1", "TV-100")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/duplicate-request"));
+
+        assertThat(countByExternalId("EXT-CONFLICT")).isEqualTo(1);
+    }
+
+    private Integer countByExternalId(String externalId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM activation_request WHERE external_id = ?", Integer.class, externalId);
+    }
+
     static String body(String externalId, String customerId, String productCode) {
         return """
                 {"externalId": "%s", "customerId": "%s", "productCode": "%s"}

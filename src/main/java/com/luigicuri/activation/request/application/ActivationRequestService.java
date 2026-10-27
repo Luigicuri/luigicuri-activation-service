@@ -3,15 +3,19 @@ package com.luigicuri.activation.request.application;
 import java.time.Clock;
 import java.util.UUID;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.persistence.ActivationRequestRepository;
+import com.luigicuri.activation.request.persistence.ConstraintViolations;
 import com.luigicuri.activation.shared.correlation.CorrelationId;
 
 @Service
 public class ActivationRequestService {
+
+    static final String EXTERNAL_ID_CONSTRAINT = "uk_activation_request_external_id";
 
     private final ActivationRequestRepository repository;
     private final Clock clock;
@@ -21,10 +25,42 @@ public class ActivationRequestService {
         this.clock = clock;
     }
 
+    /**
+     * Inserts first and lets the unique constraint decide (ADR-0002). Checking for the externalId
+     * before inserting is not enough: two concurrent transactions would both see nothing and both
+     * insert. Only the database sees both at once.
+     *
+     * <p>Deliberately not {@code @Transactional}: the failed insert marks its transaction as
+     * rollback-only, so the existing request has to be read in a separate one.
+     */
     public CreationResult create(CreateActivationRequestCommand command, String clientId) {
         var request = ActivationRequest.create(command.externalId(), command.customerId(),
                 command.productCode(), clientId, CorrelationId.current(), clock.instant());
-        return new CreationResult.Created(repository.saveAndFlush(request));
+        try {
+            return new CreationResult.Created(repository.saveAndFlush(request));
+        } catch (DataIntegrityViolationException e) {
+            if (!ConstraintViolations.isViolationOf(e, EXTERNAL_ID_CONSTRAINT)) {
+                throw e;
+            }
+            return resolveDuplicate(command, clientId);
+        }
+    }
+
+    private CreationResult resolveDuplicate(CreateActivationRequestCommand command, String clientId) {
+        var existing = repository.findByExternalId(command.externalId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "Unique constraint violated but no request found for the externalId"));
+
+        if (!existing.isOwnedBy(clientId)) {
+            // Says nothing about the other client's request (R4.5, BOLA).
+            throw new DuplicateActivationRequestException("The externalId is already in use.");
+        }
+        if (!existing.hasSameContentAs(command.customerId(), command.productCode())) {
+            throw new DuplicateActivationRequestException(
+                    "The externalId '%s' was already used with a different customerId or productCode."
+                            .formatted(command.externalId()));
+        }
+        return new CreationResult.AlreadyExists(existing);
     }
 
     @Transactional(readOnly = true)

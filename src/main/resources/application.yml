@@ -22,3 +22,7 @@ server:
 logging:
   pattern:
     level: "%5p [%X{traceId:-}]"
+  level:
+    # Duplicate externalId (SQLState 23505) is an expected outcome handled by the service (ADR-0002).
+    # Unexpected database errors are still logged, with their cause, by ApiExceptionHandler.
+    org.hibernate.engine.jdbc.spi.SqlExceptionHelper: OFF

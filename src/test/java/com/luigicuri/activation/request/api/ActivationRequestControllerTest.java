@@ -31,6 +31,7 @@ import com.luigicuri.activation.request.application.ActivationRequestNotFoundExc
 import com.luigicuri.activation.request.application.ActivationRequestService;
 import com.luigicuri.activation.request.application.CreateActivationRequestCommand;
 import com.luigicuri.activation.request.application.CreationResult;
+import com.luigicuri.activation.request.application.DuplicateActivationRequestException;
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.shared.security.CurrentClient;
 
@@ -82,6 +83,33 @@ class ActivationRequestControllerTest {
                     .andExpect(jsonPath("$.status").value("PENDING"))
                     .andExpect(jsonPath("$.createdAt").value("2026-10-26T14:03:11Z"))
                     .andExpect(jsonPath("$.failureReason").doesNotExist());
+        }
+
+        @Test
+        void retryOfAnExistingRequestReturns200WithoutLocation() throws Exception {
+            var existing = request();
+            given(service.create(any(), eq(CLIENT))).willReturn(new CreationResult.AlreadyExists(existing));
+
+            mockMvc.perform(post("/api/v1/requests")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("EXT-12345", "CUST-10001", "INTERNET-500")))
+                    .andExpect(status().isOk())
+                    .andExpect(header().doesNotExist("Location"))
+                    .andExpect(jsonPath("$.id").value(existing.getId().toString()));
+        }
+
+        @Test
+        void conflictingDuplicateReturns409() throws Exception {
+            given(service.create(any(), eq(CLIENT)))
+                    .willThrow(new DuplicateActivationRequestException("The externalId is already in use."));
+
+            mockMvc.perform(post("/api/v1/requests")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("EXT-12345", "CUST-10001", "INTERNET-500")))
+                    .andExpect(status().isConflict())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/duplicate-request"))
+                    .andExpect(jsonPath("$.detail").value("The externalId is already in use."));
         }
 
         @Test
