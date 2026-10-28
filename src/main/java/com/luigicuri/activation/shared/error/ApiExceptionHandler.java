@@ -21,8 +21,6 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import com.luigicuri.activation.request.application.ActivationRequestNotFoundException;
-import com.luigicuri.activation.request.application.DuplicateActivationRequestException;
 import com.luigicuri.activation.shared.correlation.CorrelationId;
 import com.luigicuri.activation.shared.web.RequestBodySizeLimitFilter;
 
@@ -35,13 +33,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    @ExceptionHandler(ActivationRequestNotFoundException.class)
-    ResponseEntity<Object> handleNotFound(ActivationRequestNotFoundException ex) {
+    @ExceptionHandler(ResourceNotFoundException.class)
+    ResponseEntity<Object> handleNotFound(ResourceNotFoundException ex) {
         return respond(Problems.of(HttpStatus.NOT_FOUND, "not-found", "Resource not found", ex.getMessage()));
     }
 
-    @ExceptionHandler(DuplicateActivationRequestException.class)
-    ResponseEntity<Object> handleDuplicate(DuplicateActivationRequestException ex) {
+    @ExceptionHandler(ConflictException.class)
+    ResponseEntity<Object> handleConflict(ConflictException ex) {
         return respond(Problems.of(HttpStatus.CONFLICT, "duplicate-request", "Duplicate request", ex.getMessage()));
     }
 
