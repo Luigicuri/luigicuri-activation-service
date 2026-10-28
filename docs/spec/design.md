@@ -206,7 +206,9 @@ O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é dev
 ## 8. Segurança (R8, ADR-0004)
 
 - **Fluxo:** *Client Credentials* (OAuth 2.0). A comunicação é entre sistemas, sem usuário humano.
-- **Validação:** `issuer-uri` → descoberta do JWKS (as chaves são buscadas e guardadas em cache, o que suporta rotação). Valida assinatura, `iss`, `exp`/`nbf` e `aud = activation-service` com validador customizado.
+- **Validação:** `issuer-uri` → descoberta do JWKS (as chaves são buscadas e guardadas em cache, o que suporta rotação). Valida assinatura, `iss`, `exp`/`nbf` e `aud = activation-service`, esta última via a propriedade `spring.security.oauth2.resourceserver.jwt.audiences`, sem validador customizado. A descoberta é preguiçosa: a aplicação sobe mesmo que o servidor de autorização ainda não esteja acessível.
+- **Firewall:** requisições rejeitadas pelo `StrictHttpFirewall` (caracteres de controle em headers, URLs malformadas) respondem `400` em ProblemDetail, e não `500`.
+- **Tamanho do corpo:** um filtro recusa `Content-Length` acima de 16 KB antes da leitura. Corpos *chunked* são cortados durante a leitura. Os dois casos respondem `413`.
 - **Autorização:** `POST` exige `SCOPE_activation:write`. `GET` exige `SCOPE_activation:read`.
 - **Dono:** claim `client_id` (RFC 9068), com fallback para `azp` e depois `sub`. Gravado em `client_id` na criação e aplicado como filtro em toda consulta (`findByIdAndClientId`).
 - **Ambiente local:** o `docker-compose` inclui `mock-oauth2-server` (navikt), que emite tokens reais via client credentials. Nos testes, o `jwt()` do `spring-security-test` dispensa servidor.

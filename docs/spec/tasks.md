@@ -30,9 +30,9 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 **Checkpoint 3:** fluxo assíncrono ponta a ponta.
 
 ## Fase 4 — Segurança
-- [ ] T4.1 Resource Server, escopos, entry point e access denied em ProblemDetail + testes de 401/403 — R8.1–R8.3
-- [ ] T4.2 Dono (`client_id`) aplicado em criação, consulta, listagem e duplicidade + testes — R8.4, R4.5
-- [ ] T4.3 Limite de tamanho do corpo (413) — R8.5
+- [x] T4.1 Resource Server, escopos, entry point e access denied em ProblemDetail + testes de 401/403 — R8.1–R8.3
+- [x] T4.2 Dono (`client_id`) aplicado em criação, consulta, listagem e duplicidade + testes — R8.4, R4.5
+- [x] T4.3 Limite de tamanho do corpo (413) — R8.5
 
 **Checkpoint 4:** segurança.
 
