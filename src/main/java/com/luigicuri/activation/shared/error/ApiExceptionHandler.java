@@ -24,6 +24,7 @@ import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExcep
 import com.luigicuri.activation.request.application.ActivationRequestNotFoundException;
 import com.luigicuri.activation.request.application.DuplicateActivationRequestException;
 import com.luigicuri.activation.shared.correlation.CorrelationId;
+import com.luigicuri.activation.shared.web.RequestBodySizeLimitFilter;
 
 /**
  * Maps every error to {@code application/problem+json} (RFC 9457) with a {@code traceId} that
@@ -96,6 +97,10 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
+        if (causedBy(ex, RequestBodySizeLimitFilter.PayloadTooLargeException.class)) {
+            return handleExceptionInternal(ex, RequestBodySizeLimitFilter.payloadTooLarge(), headers,
+                    HttpStatus.PAYLOAD_TOO_LARGE, request);
+        }
         var malformed = Problems.of(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request",
                 "The request body is missing or is not valid JSON.");
         return handleExceptionInternal(ex, malformed, headers, status, request);
@@ -117,6 +122,15 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
                 "One or more fields failed validation.");
         problem.setProperty("errors", violations);
         return problem;
+    }
+
+    private static boolean causedBy(Throwable error, Class<? extends Throwable> type) {
+        for (Throwable cause = error; cause != null; cause = cause.getCause()) {
+            if (type.isInstance(cause)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static ResponseEntity<Object> respond(ProblemDetail problem) {

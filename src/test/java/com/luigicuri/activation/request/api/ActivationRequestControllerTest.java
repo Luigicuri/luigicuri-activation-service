@@ -375,6 +375,20 @@ class ActivationRequestControllerTest {
         }
 
         @Test
+        @DisplayName("R8.5 body above 16 KB -> 413 before reaching the controller")
+        void oversizedBodyIsRejectedWith413() throws Exception {
+            var padding = "x".repeat(17 * 1024);
+
+            mockMvc.perform(post("/api/v1/requests")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("EXT-1", "CUST-1", "INTERNET-500").replace("}", ", \"pad\": \"" + padding + "\"}")))
+                    .andExpect(status().isPayloadTooLarge())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/payload-too-large"));
+            verifyNoInteractions(service);
+        }
+
+        @Test
         void unsupportedMethodAlsoUsesProblemDetailWithTraceId() throws Exception {
             mockMvc.perform(MockMvcRequestBuilders.delete("/api/v1/requests/{id}", UUID.randomUUID()).with(WRITER))
                     .andExpect(status().isMethodNotAllowed())
