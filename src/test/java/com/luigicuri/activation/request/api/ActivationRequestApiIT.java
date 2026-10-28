@@ -7,6 +7,8 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import java.util.UUID;
+
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -64,6 +66,26 @@ class ActivationRequestApiIT {
 
         String id = JsonPath.read(response.getContentAsString(), "$.id");
         assertThat(response.getHeader("Location")).endsWith("/api/v1/requests/" + id);
+    }
+
+    @Test
+    void timestampsReturnedOnCreationMatchTheStoredOnes() throws Exception {
+        var created = mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-TIME", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(get("/api/v1/requests/{id}", (String) JsonPath.read(created, "$.id")))
+                .andExpect(jsonPath("$.createdAt").value((String) JsonPath.read(created, "$.createdAt")))
+                .andExpect(jsonPath("$.updatedAt").value((String) JsonPath.read(created, "$.updatedAt")));
+    }
+
+    @Test
+    void unknownIdReturns404() throws Exception {
+        mockMvc.perform(get("/api/v1/requests/{id}", UUID.randomUUID()))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/not-found"));
     }
 
     @Test

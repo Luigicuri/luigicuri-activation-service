@@ -1,16 +1,21 @@
 package com.luigicuri.activation.shared.time;
 
 import java.time.Clock;
+import java.time.Duration;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
-/** A single UTC clock injected everywhere, so time-dependent code can be tested with a fixed clock. */
+/**
+ * A single UTC clock injected everywhere, so time-dependent code can be tested with a fixed clock.
+ * It ticks in milliseconds: PostgreSQL keeps microseconds and rounds anything finer, so a nanosecond
+ * Instant returned by the POST would differ from the same value read back by the GET.
+ */
 @Configuration(proxyBeanMethods = false)
 public class ClockConfiguration {
 
     @Bean
     Clock clock() {
-        return Clock.systemUTC();
+        return Clock.tick(Clock.systemUTC(), Duration.ofMillis(1));
     }
 }
