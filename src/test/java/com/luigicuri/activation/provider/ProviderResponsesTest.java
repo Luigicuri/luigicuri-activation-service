@@ -71,6 +71,7 @@ class ProviderResponsesTest {
     @Test
     void missingOrInvalidRetryAfterIsIgnored() {
         assertThat(ProviderResponses.parseRetryAfter(null, NOW)).isEmpty();
+        assertThat(ProviderResponses.parseRetryAfter("  ", NOW)).isEmpty();
         assertThat(ProviderResponses.parseRetryAfter("soon", NOW)).isEmpty();
         assertThat(ProviderResponses.parseRetryAfter("-5", NOW)).contains(Duration.ZERO);
     }

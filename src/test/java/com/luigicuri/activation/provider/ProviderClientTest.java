@@ -61,6 +61,21 @@ class ProviderClientTest {
     }
 
     @Test
+    void withoutCorrelationIdOrCredentialThoseHeadersAreNotSent() {
+        provider.stubFor(post(ProviderClient.ACTIVATE_PATH).willReturn(aResponse().withStatus(200)));
+        var properties = new ProviderProperties(provider.baseUrl(), " ", Duration.ofMillis(500), READ_TIMEOUT);
+        var client = new ProviderClient(
+                new ProviderClientConfiguration().providerRestClient(RestClient.builder(), properties), Clock.systemUTC());
+
+        client.activate(new ActivationCommand(requestId, "CUST-1", "INTERNET-500", null));
+
+        provider.verify(postRequestedFor(urlEqualTo(ProviderClient.ACTIVATE_PATH))
+                .withHeader("Idempotency-Key", equalTo(requestId.toString()))
+                .withoutHeader("X-Correlation-Id")
+                .withoutHeader("Authorization"));
+    }
+
+    @Test
     void badRequestIsPermanent() {
         provider.stubFor(post(ProviderClient.ACTIVATE_PATH).willReturn(aResponse().withStatus(400)));
 

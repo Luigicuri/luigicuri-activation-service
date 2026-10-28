@@ -251,6 +251,19 @@ class ActivationProcessingIT {
     }
 
     @Test
+    @DisplayName("a result arriving after the request was released back to PENDING is discarded")
+    void resultForARequestNoLongerProcessingIsDiscarded() {
+        var request = pendingRequest("EXT-RELEASED");
+        var claim = processingService.claimDue().getFirst();
+        jdbcTemplate.update("UPDATE activation_request SET processing_started_at = now() - interval '10 minutes'");
+        processingService.releaseExpiredClaims();
+
+        processingService.recordResult(claim, new ProviderResult.Success());
+
+        assertThat(reload(request).getStatus()).isEqualTo(ActivationStatus.PENDING);
+    }
+
+    @Test
     @DisplayName("requests not yet due are left alone")
     void requestsNotDueAreNotClaimed() {
         pendingRequest("EXT-LATER");

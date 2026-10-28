@@ -98,6 +98,15 @@ class ActivationRequestServiceTest {
         verify(repository, never()).findByExternalId(any());
     }
 
+    @Test
+    void duplicateWhoseRowCannotBeReadAgainIsAnError() {
+        given(repository.saveAndFlush(any()))
+                .willThrow(violationOf(ActivationRequestService.EXTERNAL_ID_CONSTRAINT));
+        given(repository.findByExternalId("EXT-1")).willReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.create(COMMAND, CLIENT)).isInstanceOf(IllegalStateException.class);
+    }
+
     private void givenExternalIdTakenBy(ActivationRequest existing) {
         given(repository.saveAndFlush(any()))
                 .willThrow(violationOf(ActivationRequestService.EXTERNAL_ID_CONSTRAINT));

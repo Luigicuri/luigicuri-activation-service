@@ -313,6 +313,15 @@ class ActivationRequestControllerTest {
         }
 
         @Test
+        @DisplayName("URL rejected by the security firewall -> 400 problem, not 500")
+        void urlRejectedByTheFirewallIsA400Problem() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests;jsessionid=abc").with(READER))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/malformed-request"));
+        }
+
+        @Test
         @DisplayName("R8.4 the owner is taken from the token's client_id")
         void ownerComesFromTheToken() throws Exception {
             var created = request();
