@@ -2,33 +2,44 @@ package com.luigicuri.activation.request.api;
 
 import static org.hamcrest.Matchers.containsInAnyOrder;
 import static org.hamcrest.Matchers.endsWith;
-import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.not;
+import static org.hamcrest.Matchers.startsWith;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.List;
 import java.util.UUID;
 
-import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.MediaType;
+import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.jwt.BadJwtException;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import com.luigicuri.activation.request.application.ActivationRequestNotFoundException;
 import com.luigicuri.activation.request.application.ActivationRequestQuery;
@@ -39,13 +50,21 @@ import com.luigicuri.activation.request.application.DuplicateActivationRequestEx
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.domain.ActivationStatus;
 import com.luigicuri.activation.shared.security.CurrentClient;
+import com.luigicuri.activation.shared.security.SecurityConfiguration;
 
-/** Web layer only: HTTP contract, validation and error format (R1, R2, R7). The service is mocked. */
+/**
+ * Web layer only: HTTP contract, validation, error format and security (R1, R2, R7, R8). The service is
+ * mocked; tokens are injected with spring-security-test, so no authorization server is needed.
+ */
 @WebMvcTest(ActivationRequestController.class)
+@Import({SecurityConfiguration.class, CurrentClient.class})
 class ActivationRequestControllerTest {
 
     private static final String CLIENT = "client-a";
     private static final MediaType PROBLEM_JSON = MediaType.APPLICATION_PROBLEM_JSON;
+
+    private static final RequestPostProcessor WRITER = token("SCOPE_activation:write");
+    private static final RequestPostProcessor READER = token("SCOPE_activation:read");
 
     @Autowired
     MockMvc mockMvc;
@@ -53,12 +72,22 @@ class ActivationRequestControllerTest {
     @MockitoBean
     ActivationRequestService service;
 
+    /** Only reached by requests carrying a raw bearer token; jwt() bypasses decoding. */
     @MockitoBean
-    CurrentClient currentClient;
+    JwtDecoder jwtDecoder;
 
-    @BeforeEach
-    void setUp() {
-        given(currentClient.id()).willReturn(CLIENT);
+    private static RequestPostProcessor token(String... authorities) {
+        return jwt().jwt(jwt -> jwt.claim("client_id", CLIENT))
+                .authorities(Arrays.stream(authorities).map(SimpleGrantedAuthority::new).toArray(GrantedAuthority[]::new));
+    }
+
+    /** Requests below are authorized unless a test says otherwise; security has its own nested class. */
+    private static MockHttpServletRequestBuilder post(String url, Object... uriVariables) {
+        return MockMvcRequestBuilders.post(url, uriVariables).with(WRITER);
+    }
+
+    private static MockHttpServletRequestBuilder get(String url, Object... uriVariables) {
+        return MockMvcRequestBuilders.get(url, uriVariables).with(READER);
     }
 
     private static ActivationRequest request() {
@@ -238,6 +267,67 @@ class ActivationRequestControllerTest {
     }
 
     @Nested
+    class Security {
+
+        @Test
+        @DisplayName("R8.2 no token -> 401 problem with WWW-Authenticate")
+        void requestWithoutTokenIsRejectedWith401() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests/{id}", UUID.randomUUID()))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(header().string("WWW-Authenticate", startsWith("Bearer")))
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/unauthorized"))
+                    .andExpect(jsonPath("$.traceId").isNotEmpty());
+        }
+
+        @Test
+        @DisplayName("R8.2 invalid token -> 401 without the decoder's reason")
+        void invalidTokenIsRejectedWith401() throws Exception {
+            given(jwtDecoder.decode("not-a-jwt")).willThrow(new BadJwtException("Signed JWT rejected: Invalid signature"));
+
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests/{id}", UUID.randomUUID())
+                            .header("Authorization", "Bearer not-a-jwt"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(content().string(not(containsString("Invalid signature"))));
+        }
+
+        @Test
+        @DisplayName("R8.3 read-only token cannot create -> 403")
+        void readScopeCannotCreate() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/requests").with(READER)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("EXT-1", "CUST-1", "INTERNET-500")))
+                    .andExpect(status().isForbidden())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/forbidden"));
+            verifyNoInteractions(service);
+        }
+
+        @Test
+        @DisplayName("R8.3 write-only token cannot read -> 403")
+        void writeScopeCannotRead() throws Exception {
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests").with(WRITER))
+                    .andExpect(status().isForbidden());
+            mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests/{id}", UUID.randomUUID()).with(WRITER))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("R8.4 the owner is taken from the token's client_id")
+        void ownerComesFromTheToken() throws Exception {
+            var created = request();
+            given(service.create(any(), eq(CLIENT))).willReturn(new CreationResult.Created(created));
+
+            mockMvc.perform(post("/api/v1/requests")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body("EXT-12345", "CUST-10001", "INTERNET-500")))
+                    .andExpect(status().isCreated());
+
+            verify(service).create(any(), eq(CLIENT));
+        }
+    }
+
+    @Nested
     class Errors {
 
         @Test
@@ -264,17 +354,29 @@ class ActivationRequestControllerTest {
         }
 
         @Test
-        void unsafeCorrelationIdIsReplaced() throws Exception {
+        void correlationIdOutsideTheAllowedFormatIsReplaced() throws Exception {
+            mockMvc.perform(post("/api/v1/requests")
+                            .header("X-Correlation-Id", "<script>alert(1)</script>")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(header().string("X-Correlation-Id", matchesPattern("[a-f0-9]{32}")));
+        }
+
+        @Test
+        void headerWithControlCharactersIsRejectedAs400() throws Exception {
             mockMvc.perform(post("/api/v1/requests")
                             .header("X-Correlation-Id", "abc\nFAKE LOG LINE")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(content().contentType(PROBLEM_JSON))
+                    .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/malformed-request"))
                     .andExpect(header().string("X-Correlation-Id", not(containsString("FAKE"))));
         }
 
         @Test
         void unsupportedMethodAlsoUsesProblemDetailWithTraceId() throws Exception {
-            mockMvc.perform(delete("/api/v1/requests/{id}", UUID.randomUUID()))
+            mockMvc.perform(MockMvcRequestBuilders.delete("/api/v1/requests/{id}", UUID.randomUUID()).with(WRITER))
                     .andExpect(status().isMethodNotAllowed())
                     .andExpect(content().contentType(PROBLEM_JSON))
                     .andExpect(jsonPath("$.traceId").isNotEmpty());

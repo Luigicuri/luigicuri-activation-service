@@ -1,21 +1,23 @@
 package com.luigicuri.activation.request.api;
 
+import static com.luigicuri.activation.support.TestTokens.client;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.hamcrest.Matchers.matchesPattern;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.util.UUID;
 
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.MockHttpServletRequestBuilder;
+import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 
 import com.jayway.jsonpath.JsonPath;
 import com.luigicuri.activation.support.IntegrationTest;
@@ -32,6 +34,14 @@ class ActivationRequestApiIT {
 
     @Autowired
     JdbcTemplate jdbcTemplate;
+
+    private static MockHttpServletRequestBuilder post(String url, Object... uriVariables) {
+        return MockMvcRequestBuilders.post(url, uriVariables).with(client("client-a"));
+    }
+
+    private static MockHttpServletRequestBuilder get(String url, Object... uriVariables) {
+        return MockMvcRequestBuilders.get(url, uriVariables).with(client("client-a"));
+    }
 
     @BeforeEach
     void cleanDatabase() {
@@ -119,6 +129,52 @@ class ActivationRequestApiIT {
                 .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/duplicate-request"));
 
         assertThat(countByExternalId("EXT-CONFLICT")).isEqualTo(1);
+    }
+
+    @Test
+    @DisplayName("R8.4 a client cannot read another client's request: 404, as if it did not exist")
+    void anotherClientsRequestIsNotFound() throws Exception {
+        var created = mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-OWNED", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isCreated())
+                .andReturn().getResponse().getContentAsString();
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests/{id}", (String) JsonPath.read(created, "$.id"))
+                        .with(client("client-b")))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    @DisplayName("R8.4 listing only shows the caller's requests")
+    void listingIsScopedToTheCaller() throws Exception {
+        mockMvc.perform(post("/api/v1/requests")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("EXT-A", "CUST-1", "INTERNET-500")));
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/requests").with(client("client-b"))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body("EXT-B", "CUST-1", "INTERNET-500")));
+
+        mockMvc.perform(MockMvcRequestBuilders.get("/api/v1/requests").with(client("client-b")))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.content[0].externalId").value("EXT-B"));
+    }
+
+    @Test
+    @DisplayName("R4.5 an externalId taken by another client is a 409 that reveals nothing about it")
+    void externalIdTakenByAnotherClientReturnsGenericConflict() throws Exception {
+        mockMvc.perform(post("/api/v1/requests")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-SHARED", "CUST-SECRET", "INTERNET-500")))
+                .andExpect(status().isCreated());
+
+        mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/requests").with(client("client-b"))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-SHARED", "CUST-SECRET", "INTERNET-500")))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.detail").value("The externalId is already in use."))
+                .andExpect(jsonPath("$.id").doesNotExist());
     }
 
     private Integer countByExternalId(String externalId) {

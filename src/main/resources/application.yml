@@ -16,6 +16,14 @@ spring:
   flyway:
     enabled: true
 
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          # Keys are discovered from the issuer's JWKS (cached, rotation-friendly). Discovery is lazy,
+          # so the service starts even if the authorization server is not reachable yet.
+          issuer-uri: ${JWT_ISSUER_URI:http://localhost:8090/default}
+          audiences: ${JWT_AUDIENCE:activation-service}
   task:
     scheduling:
       pool:

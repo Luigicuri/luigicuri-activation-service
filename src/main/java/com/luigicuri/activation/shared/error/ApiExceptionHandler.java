@@ -1,6 +1,5 @@
 package com.luigicuri.activation.shared.error;
 
-import java.net.URI;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -12,6 +11,7 @@ import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.security.web.firewall.RequestRejectedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,22 +34,27 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    static final String PROBLEM_BASE_URI = "https://api.luigicuri.dev/problems/";
-
     @ExceptionHandler(ActivationRequestNotFoundException.class)
     ResponseEntity<Object> handleNotFound(ActivationRequestNotFoundException ex) {
-        return respond(problem(HttpStatus.NOT_FOUND, "not-found", "Resource not found", ex.getMessage()));
+        return respond(Problems.of(HttpStatus.NOT_FOUND, "not-found", "Resource not found", ex.getMessage()));
     }
 
     @ExceptionHandler(DuplicateActivationRequestException.class)
     ResponseEntity<Object> handleDuplicate(DuplicateActivationRequestException ex) {
-        return respond(problem(HttpStatus.CONFLICT, "duplicate-request", "Duplicate request", ex.getMessage()));
+        return respond(Problems.of(HttpStatus.CONFLICT, "duplicate-request", "Duplicate request", ex.getMessage()));
+    }
+
+    /** The security firewall validates headers lazily, so a malformed header can surface here. */
+    @ExceptionHandler(RequestRejectedException.class)
+    ResponseEntity<Object> handleRejected(RequestRejectedException ex) {
+        return respond(Problems.of(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request",
+                "The request contains characters that are not allowed."));
     }
 
     @ExceptionHandler(Exception.class)
     ResponseEntity<Object> handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
-        return respond(problem(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal error",
+        return respond(Problems.of(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal error",
                 "An unexpected error occurred. Report the traceId to get it investigated."));
     }
 
@@ -79,7 +84,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
             HttpStatusCode status, WebRequest request) {
         if (ex instanceof MethodArgumentTypeMismatchException mismatch
                 && mismatch.getParameter().hasParameterAnnotation(PathVariable.class)) {
-            var notFound = problem(HttpStatus.NOT_FOUND, "not-found", "Resource not found",
+            var notFound = Problems.of(HttpStatus.NOT_FOUND, "not-found", "Resource not found",
                     "No resource exists for the given identifier.");
             return handleExceptionInternal(ex, notFound, headers, HttpStatus.NOT_FOUND, request);
         }
@@ -91,7 +96,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @Override
     protected ResponseEntity<Object> handleHttpMessageNotReadable(HttpMessageNotReadableException ex,
             HttpHeaders headers, HttpStatusCode status, WebRequest request) {
-        var malformed = problem(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request",
+        var malformed = Problems.of(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request",
                 "The request body is missing or is not valid JSON.");
         return handleExceptionInternal(ex, malformed, headers, status, request);
     }
@@ -107,16 +112,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return response;
     }
 
-    static ProblemDetail problem(HttpStatus status, String slug, String title, String detail) {
-        var problem = ProblemDetail.forStatusAndDetail(status, detail);
-        problem.setType(URI.create(PROBLEM_BASE_URI + slug));
-        problem.setTitle(title);
-        problem.setProperty("traceId", CorrelationId.current());
-        return problem;
-    }
-
     private static ProblemDetail validationProblem(List<FieldViolation> violations) {
-        var problem = problem(HttpStatus.BAD_REQUEST, "validation-error", "Invalid data",
+        var problem = Problems.of(HttpStatus.BAD_REQUEST, "validation-error", "Invalid data",
                 "One or more fields failed validation.");
         problem.setProperty("errors", violations);
         return problem;

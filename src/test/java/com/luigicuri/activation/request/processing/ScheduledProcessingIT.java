@@ -6,6 +6,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo;
 import static com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig;
+import static com.luigicuri.activation.support.TestTokens.client;
 import static org.awaitility.Awaitility.await;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -55,7 +56,7 @@ class ScheduledProcessingIT {
     void createdRequestIsActivatedInTheBackground() throws Exception {
         provider.stubFor(post("/provider/v1/activate").willReturn(aResponse().withStatus(200)));
 
-        var created = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/requests")
+        var created = mockMvc.perform(MockMvcRequestBuilders.post("/api/v1/requests").with(client("client-a"))
                         .header("X-Correlation-Id", "e2e-trace-1")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("""
@@ -67,7 +68,7 @@ class ScheduledProcessingIT {
         String id = JsonPath.read(created, "$.id");
 
         await().atMost(Duration.ofSeconds(10)).untilAsserted(() ->
-                mockMvc.perform(get("/api/v1/requests/{id}", id))
+                mockMvc.perform(get("/api/v1/requests/{id}", id).with(client("client-a")))
                         .andExpect(jsonPath("$.status").value("COMPLETED")));
 
         provider.verify(1, postRequestedFor(urlEqualTo("/provider/v1/activate"))
