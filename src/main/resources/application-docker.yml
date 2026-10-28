@@ -1,0 +1,5 @@
+# Profile used inside containers: JSON logs for log aggregation (R9.4)
+logging:
+  structured:
+    format:
+      console: ecs

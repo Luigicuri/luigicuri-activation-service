@@ -36,6 +36,30 @@ spring:
 server:
   shutdown: graceful
 
+# Actuator on its own port: reachable by the orchestrator and Prometheus, never exposed publicly (R8.6)
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health, info, prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      group:
+        readiness:
+          include: readinessState, db
+  metrics:
+    tags:
+      application: ${spring.application.name}
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+        http.client.requests: true
+        activation.provider.calls: true
+
 provider:
   base-url: ${PROVIDER_BASE_URL:http://localhost:8089}
   # Injected from a secret store in production; never logged

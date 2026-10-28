@@ -11,6 +11,8 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import com.luigicuri.activation.provider.ProviderResult;
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.domain.ActivationStatus;
@@ -29,13 +31,15 @@ public class ActivationProcessingService {
     private final RetryPolicy retryPolicy;
     private final ProcessingProperties properties;
     private final Clock clock;
+    private final MeterRegistry meterRegistry;
 
     public ActivationProcessingService(ActivationRequestRepository repository, RetryPolicy retryPolicy,
-                                       ProcessingProperties properties, Clock clock) {
+                                       ProcessingProperties properties, Clock clock, MeterRegistry meterRegistry) {
         this.repository = repository;
         this.retryPolicy = retryPolicy;
         this.properties = properties;
         this.clock = clock;
+        this.meterRegistry = meterRegistry;
     }
 
     /** Moves a batch of due requests to PROCESSING and commits, so the claim survives the provider call. */
@@ -70,6 +74,7 @@ public class ActivationProcessingService {
             case ProviderResult.TransientFailure failure ->
                     retryOrFail(request, failure.reason(), failure.retryAfter(), now);
         }
+        countTransition(request);
     }
 
     /** Releases requests stuck in PROCESSING past their lease. The lost call counts as an attempt. */
@@ -77,9 +82,16 @@ public class ActivationProcessingService {
     public int releaseExpiredClaims() {
         var now = clock.instant();
         var expired = repository.lockExpiredProcessing(now.minus(properties.leaseTimeout()), properties.batchSize());
-        expired.forEach(request -> retryOrFail(request,
-                "Provider call did not complete within the processing lease", Optional.empty(), now));
+        expired.forEach(request -> {
+            retryOrFail(request, "Provider call did not complete within the processing lease", Optional.empty(), now);
+            countTransition(request);
+        });
         return expired.size();
+    }
+
+    /** Requests leaving PROCESSING, by resulting status: completions, failures and retries over time (R9.3). */
+    private void countTransition(ActivationRequest request) {
+        meterRegistry.counter("activation.requests.transitions", "to", request.getStatus().name()).increment();
     }
 
     private void retryOrFail(ActivationRequest request, String reason, Optional<Duration> retryAfter, Instant now) {
