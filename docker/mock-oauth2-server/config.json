@@ -1,0 +1,21 @@
+{
+  "interactiveLogin": false,
+  "tokenCallbacks": [
+    {
+      "issuerId": "default",
+      "tokenExpiry": 900,
+      "requestMappings": [
+        {
+          "requestParam": "grant_type",
+          "match": "client_credentials",
+          "claims": {
+            "sub": "${clientId}",
+            "client_id": "${clientId}",
+            "aud": ["activation-service"],
+            "scope": "${scope}"
+          }
+        }
+      ]
+    }
+  ]
+}

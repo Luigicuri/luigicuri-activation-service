@@ -1,0 +1,72 @@
+# Local environment: application + PostgreSQL + provider mock + OAuth2 authorization server mock.
+#   docker compose up --build
+# Host ports default to the 18xxx range (8080-8268 is often reserved by Hyper-V on Windows);
+# override with APP_PORT, MANAGEMENT_PORT, PROVIDER_PORT and AUTH_PORT.
+# See README ("Como executar") for getting a token and calling the API.
+name: activation-service
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: activation
+      POSTGRES_USER: activation
+      POSTGRES_PASSWORD: activation
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U activation -d activation"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # External activation provider (WireMock). Scenarios by productCode: see docker/wiremock/mappings
+  provider-mock:
+    image: wiremock/wiremock:3.13.2
+    command: ["--disable-banner"]
+    volumes:
+      - ./docker/wiremock:/home/wiremock:ro
+    ports:
+      - "${PROVIDER_PORT:-18089}:8080"
+
+  # OAuth 2.0 authorization server mock: issues signed JWTs via client_credentials
+  auth:
+    image: ghcr.io/navikt/mock-oauth2-server:2.2.1
+    environment:
+      SERVER_PORT: 8080
+      JSON_CONFIG_PATH: /config/config.json
+    volumes:
+      - ./docker/mock-oauth2-server/config.json:/config/config.json:ro
+    ports:
+      - "${AUTH_PORT:-18090}:8080"
+
+  app:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+      provider-mock:
+        condition: service_started
+      auth:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/activation
+      DB_USERNAME: activation
+      DB_PASSWORD: activation
+      PROVIDER_BASE_URL: http://provider-mock:8080
+      PROVIDER_API_KEY: local-demo-key
+      # Tokens are requested from the host, so that is the issuer they carry;
+      # the keys are fetched over the compose network.
+      JWT_ISSUER_URI: http://localhost:${AUTH_PORT:-18090}/default
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth:8080/default/jwks
+    ports:
+      - "${APP_PORT:-18080}:8080"
+      - "${MANAGEMENT_PORT:-18081}:8081" # management port, published only for local inspection
+    deploy:
+      resources:
+        limits:
+          memory: 512m
+    stop_grace_period: 40s
+
+volumes:
+  pgdata:

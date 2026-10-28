@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/provider/v1/activate",
+    "bodyPatterns": [ { "matchesJsonPath": "$[?(@.productCode == 'UNAVAILABLE-PRODUCT')]" } ]
+  },
+  "response": {
+    "status": 503,
+    "headers": { "Retry-After": "5" }
+  }
+}

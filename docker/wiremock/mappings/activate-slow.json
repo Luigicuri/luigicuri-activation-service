@@ -1,0 +1,12 @@
+{
+  "priority": 1,
+  "request": {
+    "method": "POST",
+    "urlPath": "/provider/v1/activate",
+    "bodyPatterns": [ { "matchesJsonPath": "$[?(@.productCode == 'SLOW-PRODUCT')]" } ]
+  },
+  "response": {
+    "status": 200,
+    "fixedDelayMilliseconds": 8000
+  }
+}

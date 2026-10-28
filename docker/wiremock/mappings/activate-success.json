@@ -1,0 +1,14 @@
+{
+  "priority": 10,
+  "request": {
+    "method": "POST",
+    "urlPath": "/provider/v1/activate",
+    "headers": { "Idempotency-Key": { "matches": ".+" } }
+  },
+  "response": {
+    "status": 200,
+    "headers": { "Content-Type": "application/json" },
+    "jsonBody": { "status": "ACTIVATED" },
+    "fixedDelayMilliseconds": 300
+  }
+}
