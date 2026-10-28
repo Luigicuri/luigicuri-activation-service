@@ -56,7 +56,7 @@ public class RequestBodySizeLimitFilter extends OncePerRequestFilter {
     /** Thrown while reading a chunked body that goes over the limit. */
     public static class PayloadTooLargeException extends IOException {
 
-        PayloadTooLargeException() {
+        public PayloadTooLargeException() {
             super("Request body exceeds " + MAX_BODY_BYTES + " bytes");
         }
     }

@@ -1,6 +1,5 @@
 package com.luigicuri.activation.provider;
 
-import java.io.InterruptedIOException;
 import java.net.http.HttpTimeoutException;
 import java.time.Clock;
 import java.util.Optional;
@@ -57,7 +56,8 @@ public class ProviderClient {
 
     private static boolean isTimeout(Throwable error) {
         for (Throwable cause = error; cause != null; cause = cause.getCause()) {
-            if (cause instanceof HttpTimeoutException || cause instanceof InterruptedIOException) {
+            // The JDK client reports both connect and read timeouts as HttpTimeoutException
+            if (cause instanceof HttpTimeoutException) {
                 return true;
             }
         }

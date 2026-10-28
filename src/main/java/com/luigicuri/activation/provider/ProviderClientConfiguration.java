@@ -5,6 +5,7 @@ import java.net.http.HttpClient;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
+import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 
 @Configuration(proxyBeanMethods = false)
@@ -27,7 +28,7 @@ public class ProviderClientConfiguration {
                 .baseUrl(properties.baseUrl())
                 .requestFactory(requestFactory)
                 .defaultHeaders(headers -> {
-                    if (properties.apiKey() != null && !properties.apiKey().isBlank()) {
+                    if (StringUtils.hasText(properties.apiKey())) {
                         headers.setBearerAuth(properties.apiKey());
                     }
                 })
