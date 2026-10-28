@@ -1,0 +1,618 @@
+{
+  "info": {
+    "name": "Activation Service",
+    "description": "Exemplos para os 3 endpoints da API, com login OAuth2 (client credentials).\n\n1. Na colecao, aba **Authorization**, clique em **Get New Access Token** e depois em **Use Token**.\n2. Execute as requisicoes na ordem das pastas. Cada uma confere o resultado esperado na aba **Test Results**.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "oauth2",
+    "oauth2": [
+      {
+        "key": "accessToken",
+        "value": "{{accessToken}}",
+        "type": "string"
+      },
+      {
+        "key": "tokenName",
+        "value": "orders-system",
+        "type": "string"
+      },
+      {
+        "key": "grant_type",
+        "value": "client_credentials",
+        "type": "string"
+      },
+      {
+        "key": "accessTokenUrl",
+        "value": "{{authUrl}}/default/token",
+        "type": "string"
+      },
+      {
+        "key": "clientId",
+        "value": "orders-system",
+        "type": "string"
+      },
+      {
+        "key": "clientSecret",
+        "value": "secret",
+        "type": "string"
+      },
+      {
+        "key": "scope",
+        "value": "activation:read activation:write",
+        "type": "string"
+      },
+      {
+        "key": "client_authentication",
+        "value": "header",
+        "type": "string"
+      },
+      {
+        "key": "addTokenTo",
+        "value": "header",
+        "type": "string"
+      }
+    ]
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:18080"
+    },
+    {
+      "key": "authUrl",
+      "value": "http://localhost:18090"
+    },
+    {
+      "key": "pedido",
+      "value": ""
+    },
+    {
+      "key": "requestId",
+      "value": ""
+    },
+    {
+      "key": "failedRequestId",
+      "value": ""
+    },
+    {
+      "key": "retryRequestId",
+      "value": ""
+    }
+  ],
+  "item": [
+    {
+      "name": "1. Criar solicitação (POST)",
+      "item": [
+        {
+          "name": "1.1 Criação válida",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// Um numero de pedido novo a cada execucao",
+                  "pm.collectionVariables.set('pedido', 'PEDIDO-' + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('Status PENDING', () => pm.expect(pm.response.json().status).to.eql('PENDING'));",
+                  "pm.test('Header Location', () => pm.response.to.have.header('Location'));",
+                  "pm.collectionVariables.set('requestId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Cria a solicitação. `{{pedido}}` recebe um número novo a cada execução; o `id` da resposta fica guardado para as consultas.",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"INTERNET-500\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.2 Reenviar o mesmo corpo",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK (repeticao reconhecida)', () => pm.response.to.have.status(200));",
+                  "pm.test('Mesmo id da criacao', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('requestId')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "Reenvia exatamente o mesmo corpo: o sistema reconhece a repetição e devolve o registro existente.",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"INTERNET-500\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.3 Mesmo externalId, outro produto",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"TV-100\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.4 Dados inválidos",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "const fields = pm.response.json().errors.map(e => e.field);",
+                  "pm.test('Erros em externalId e customerId', () => pm.expect(fields).to.include.members(['externalId', 'customerId']));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"PEDIDO 1002\",\n  \"productCode\": \"INTERNET-500\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.5 Produto que o provedor recusa",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('failedRequestId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}-RECUSA\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"INVALID-PRODUCT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "1.6 Provedor indisponível",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.collectionVariables.set('retryRequestId', pm.response.json().id);"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}-RETRY\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"UNAVAILABLE-PRODUCT\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "2. Consultar solicitação (GET por id)",
+      "item": [
+        {
+          "name": "2.1 Ativação concluída",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// O processamento e em segundo plano: espera 2 s antes de consultar",
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Status COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests/{{requestId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "2.2 Recusada pelo provedor",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// O processamento e em segundo plano: espera 2 s antes de consultar",
+                  "setTimeout(() => {}, 2000);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status FAILED', () => pm.expect(pm.response.json().status).to.eql('FAILED'));",
+                  "pm.test('Motivo da recusa', () => pm.expect(pm.response.json().failureReason).to.include('HTTP 400'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests/{{failedRequestId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "2.3 Tentativas automáticas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const body = pm.response.json();",
+                  "pm.test('PENDING enquanto tenta de novo; FAILED apos ~30 s', () => pm.expect(['PENDING', 'FAILED']).to.include(body.status));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests/{{retryRequestId}}",
+            "description": ""
+          }
+        },
+        {
+          "name": "2.4 Solicitação inexistente",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests/00000000-0000-0000-0000-000000000000",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "3. Listar solicitações (GET)",
+      "item": [
+        {
+          "name": "3.1 Todas",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('Traz a lista e o total', () => { const b = pm.response.json(); pm.expect(b.content).to.be.an('array'); pm.expect(b.totalElements).to.be.above(0); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests",
+            "description": ""
+          }
+        },
+        {
+          "name": "3.2 Só as que falharam",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Todas com status FAILED', () => pm.response.json().content.forEach(r => pm.expect(r.status).to.eql('FAILED')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests?status=FAILED",
+            "description": ""
+          }
+        },
+        {
+          "name": "3.3 Por cliente, paginado",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const b = pm.response.json();",
+                  "pm.test('No maximo 2 itens', () => pm.expect(b.content.length).to.be.at.most(2));",
+                  "pm.test('So do CLIENTE-42', () => b.content.forEach(r => pm.expect(r.customerId).to.eql('CLIENTE-42')));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests?customerId=CLIENTE-42&page=0&size=2",
+            "description": ""
+          }
+        },
+        {
+          "name": "3.4 Página grande demais",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests?size=500",
+            "description": ""
+          }
+        }
+      ]
+    },
+    {
+      "name": "4. Permissões (cliente só leitura)",
+      "auth": {
+        "type": "oauth2",
+        "oauth2": [
+          {
+            "key": "accessToken",
+            "value": "{{readOnlyToken}}",
+            "type": "string"
+          },
+          {
+            "key": "tokenName",
+            "value": "reporting",
+            "type": "string"
+          },
+          {
+            "key": "grant_type",
+            "value": "client_credentials",
+            "type": "string"
+          },
+          {
+            "key": "accessTokenUrl",
+            "value": "{{authUrl}}/default/token",
+            "type": "string"
+          },
+          {
+            "key": "clientId",
+            "value": "reporting",
+            "type": "string"
+          },
+          {
+            "key": "clientSecret",
+            "value": "secret",
+            "type": "string"
+          },
+          {
+            "key": "scope",
+            "value": "activation:read",
+            "type": "string"
+          },
+          {
+            "key": "client_authentication",
+            "value": "header",
+            "type": "string"
+          },
+          {
+            "key": "addTokenTo",
+            "value": "header",
+            "type": "string"
+          }
+        ]
+      },
+      "description": "Esta pasta tem o próprio login: um cliente que só pode consultar. Na aba **Authorization** da pasta, clique em **Get New Access Token** e depois em **Use Token**.",
+      "item": [
+        {
+          "name": "4.1 Tentar criar sem permissão",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "description": "",
+            "url": "{{baseUrl}}/api/v1/requests",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalId\": \"{{pedido}}-RO\",\n  \"customerId\": \"CLIENTE-42\",\n  \"productCode\": \"INTERNET-500\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          }
+        },
+        {
+          "name": "4.2 Ler solicitação de outro sistema",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404: um sistema nao enxerga o que outro criou', () => pm.response.to.have.status(404));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/requests/{{requestId}}",
+            "description": ""
+          }
+        }
+      ]
+    }
+  ]
+}

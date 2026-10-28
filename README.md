@@ -68,6 +68,10 @@ Com a stack no ar, abra **http://localhost:18080/swagger-ui.html**:
 
 A especificação OpenAPI fica em `/v3/api-docs`. A documentação é pública, mas toda operação exige token. Em produção, ela pode ser desligada com `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
+### Usando pelo Postman
+
+Importe a coleção [docs/postman/activation-service.postman_collection.json](docs/postman/activation-service.postman_collection.json): 16 requisições em 4 pastas (criar, consultar, listar e permissões), cada uma com a verificação do resultado esperado. O login já vem configurado: na coleção, aba **Authorization** → **Get New Access Token** → **Use Token**. A pasta 4 tem login próprio, de um cliente só leitura. A coleção foi validada com o Newman contra a stack do compose.
+
 ### Chamando a API
 
 **1. Obter um token (fluxo *client credentials*):**
