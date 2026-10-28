@@ -3,7 +3,7 @@
 Serviço de ativação de produtos de clientes. Ele registra solicitações, permite consultar o status e realiza a ativação por meio de um provedor externo.
 
 **Stack:** Java 21 · Spring Boot 3.5 (Spring MVC, Spring Data JPA/Hibernate, Spring Security) · PostgreSQL 16 · Flyway · Maven · Docker.
-**Testes:** JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility, ArchUnit, totalizando 121 testes.
+**Testes:** 151 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
 
 | Documento | Conteúdo |
 |---|---|
@@ -35,7 +35,7 @@ Serviço de ativação de produtos de clientes. Ele registra solicitações, per
 
 ### Testes
 
-Executa os testes unitários, os de integração (PostgreSQL real + WireMock) e as regras de arquitetura:
+Executa os testes unitários, os de integração (PostgreSQL real + WireMock) e as regras de arquitetura, e verifica a cobertura. O relatório fica em `target/site/jacoco/index.html`:
 
 ```bash
 ./mvnw verify
@@ -261,7 +261,8 @@ Um único `@RestControllerAdvice` converte tudo para ProblemDetail, inclusive os
 | **Arquitetura** | Dependências entre pacotes, sem ciclos | ArchUnit |
 
 - O worker fica **desligado** nos testes de integração e é chamado diretamente, um ciclo por vez. Assim cada cenário é determinístico. Um único teste ([ScheduledProcessingIT](src/test/java/com/luigicuri/activation/request/processing/ScheduledProcessingIT.java)) liga o agendador real e valida o fluxo de ponta a ponta com Awaitility.
-- O objetivo não é a cobertura em si, e sim que cada critério de aceite da [spec](docs/spec/requirements.md) tenha um teste que falhe se o comportamento mudar.
+- **Cobertura:** o JaCoCo mede os testes unitários e de integração juntos, e o `./mvnw verify` **falha** abaixo de 100% de linhas e de ramos. A única exclusão é o `main()`, que só chama `SpringApplication.run`. Ao fechar as lacunas, em vez de criar testes só para executar linhas, removi código defensivo que nunca podia ser atingido, e os testes novos encontraram um bug real: `fail(null)` alterava o status antes de lançar a exceção.
+- O objetivo não é o número em si, e sim que cada critério de aceite da [spec](docs/spec/requirements.md) tenha um teste que falhe se o comportamento mudar. O gate de 100% garante que nenhum código novo entre sem teste.
 
 ---
 
@@ -338,7 +339,7 @@ Como eu executaria o serviço:
   - os consumidores tratam o evento de forma idempotente (pelo `id` do evento).
   Assim não existe o caso de "gravou mas não publicou", nem o contrário.
 - **Pipeline de CI/CD:**
-  - **CI** (já implementado em [.github/workflows/ci.yml](.github/workflows/ci.yml)): `./mvnw verify` (unitários, integração, arquitetura) e build da imagem.
+  - **CI** (já implementado em [.github/workflows/ci.yml](.github/workflows/ci.yml)): `./mvnw verify` (unitários, integração, arquitetura e gate de cobertura de 100%) e build da imagem.
   - **Etapas seguintes:** análise estática e de dependências (SonarQube, Snyk); publicação da imagem no registry com a tag do commit; deploy automático em homologação; testes de fumaça; promoção para produção com aprovação, deploy *rolling* ou *canary* e rollback automático se os alertas dispararem.
 
 ---
