@@ -16,8 +16,38 @@ spring:
   flyway:
     enabled: true
 
+  task:
+    scheduling:
+      pool:
+        size: 2
+      shutdown:
+        # Let an in-flight provider call finish and record its result on shutdown
+        await-termination: true
+        await-termination-period: 30s
+
 server:
   shutdown: graceful
+
+provider:
+  base-url: ${PROVIDER_BASE_URL:http://localhost:8089}
+  # Injected from a secret store in production; never logged
+  api-key: ${PROVIDER_API_KEY:}
+  connect-timeout: 2s
+  read-timeout: 5s
+
+activation:
+  processing:
+    enabled: true
+    poll-interval: 1s
+    batch-size: 10
+    # Must exceed batch-size x (connect-timeout + read-timeout), or a slow batch would be reclaimed mid-flight
+    lease-timeout: 2m
+    reconciliation-interval: 30s
+  retry:
+    max-attempts: 5
+    initial-delay: 2s
+    multiplier: 2.0
+    max-delay: 5m
 
 logging:
   pattern:
