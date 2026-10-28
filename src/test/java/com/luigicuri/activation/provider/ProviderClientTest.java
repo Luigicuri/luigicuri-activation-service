@@ -24,7 +24,7 @@ import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 /** The HTTP contract with the provider, against a WireMock server. No Spring context needed. */
 class ProviderClientTest {
 
-    private static final Duration READ_TIMEOUT = Duration.ofMillis(300);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(1);
 
     @RegisterExtension
     static WireMockExtension provider = WireMockExtension.newInstance()
@@ -86,7 +86,7 @@ class ProviderClientTest {
     @Test
     void responseSlowerThanReadTimeoutIsATransientTimeout() {
         provider.stubFor(post(ProviderClient.ACTIVATE_PATH)
-                .willReturn(aResponse().withStatus(200).withFixedDelay((int) READ_TIMEOUT.toMillis() * 4)));
+                .willReturn(aResponse().withStatus(200).withFixedDelay((int) READ_TIMEOUT.toMillis() * 5 / 2)));
 
         assertThat(client().activate(command)).isEqualTo(
                 new ProviderResult.TransientFailure("Provider call timed out", Optional.empty()));

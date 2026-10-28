@@ -9,12 +9,15 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 
 /**
- * Full application context backed by a PostgreSQL container. All integration tests
- * share the same configuration, so Spring caches a single context for the suite.
+ * Full application context backed by a PostgreSQL container. All integration tests share the same
+ * configuration, so Spring caches a single context for the suite.
+ *
+ * <p>The scheduled worker is off: tests that exercise processing call it explicitly, which keeps them
+ * deterministic and stops it from changing rows other tests are asserting on.
  */
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
-@SpringBootTest
+@SpringBootTest(properties = "activation.processing.enabled=false")
 @Import(TestcontainersConfiguration.class)
 public @interface IntegrationTest {
 }
