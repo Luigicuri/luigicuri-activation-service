@@ -120,6 +120,7 @@ public class ActivationRequest {
     }
 
     public void fail(String reason, Instant now) {
+        Objects.requireNonNull(reason, "a failed request needs a reason");
         requireStatus(PROCESSING, FAILED);
         status = FAILED;
         failureReason = truncate(reason);
@@ -143,10 +144,7 @@ public class ActivationRequest {
     }
 
     private static String truncate(String reason) {
-        if (reason == null || reason.length() <= FAILURE_REASON_MAX_LENGTH) {
-            return reason;
-        }
-        return reason.substring(0, FAILURE_REASON_MAX_LENGTH);
+        return reason.length() <= FAILURE_REASON_MAX_LENGTH ? reason : reason.substring(0, FAILURE_REASON_MAX_LENGTH);
     }
 
     public UUID getId() {

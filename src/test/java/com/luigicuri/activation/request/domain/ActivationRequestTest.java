@@ -86,6 +86,15 @@ class ActivationRequestTest {
         }
 
         @Test
+        void failureWithoutReasonIsRejected() {
+            var request = newRequest();
+            request.startProcessing(T1);
+
+            assertThatThrownBy(() -> request.fail(null, T1)).isInstanceOf(NullPointerException.class);
+            assertThat(request.getStatus()).isEqualTo(ActivationStatus.PROCESSING);
+        }
+
+        @Test
         void processingBackToPendingOnRetryKeepsTheAttemptCount() {
             var request = newRequest();
             request.startProcessing(T1);
