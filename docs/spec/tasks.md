@@ -40,8 +40,8 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T5.1 Actuator (porta de gestão, probes) + métricas Micrometer + logs JSON — R8.6, R9
 - [x] T5.2 `Dockerfile` multi-stage — R10.2
 - [x] T5.3 `docker-compose.yml` (app, Postgres, WireMock com mappings, mock-oauth2-server) (comandos de exemplo no README) — R10.3
-- [ ] T5.4 Testes ArchUnit — R10.7
-- [ ] T5.5 GitHub Actions — R10.5
-- [ ] T5.6 README completo, incluindo o cenário de análise do item 10 — R10.6
+- [x] T5.4 Testes ArchUnit — R10.7
+- [x] T5.5 GitHub Actions — R10.5
+- [x] T5.6 README completo, incluindo o cenário de análise do item 10 — R10.6
 
 **Checkpoint 5:** revisão final + simulação do code review da entrevista.
