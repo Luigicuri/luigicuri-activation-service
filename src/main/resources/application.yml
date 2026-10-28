@@ -60,6 +60,21 @@ management:
         http.client.requests: true
         activation.provider.calls: true
 
+# Interactive API documentation: /swagger-ui.html (disable with SPRINGDOC_SWAGGER_UI_ENABLED=false)
+springdoc:
+  swagger-ui:
+    operations-sorter: method
+    oauth:
+      client-id: ${OPENAPI_CLIENT_ID:}
+      client-secret: ${OPENAPI_CLIENT_SECRET:}
+  # Errors are documented per operation; do not repeat every handler's status on every endpoint
+  override-with-generic-response: false
+
+openapi:
+  oauth2:
+    # Token endpoint the browser calls on "Authorize" (mock-oauth2-server and many servers: <issuer>/token)
+    token-url: ${OPENAPI_TOKEN_URL:${spring.security.oauth2.resourceserver.jwt.issuer-uri}/token}
+
 provider:
   base-url: ${PROVIDER_BASE_URL:http://localhost:8089}
   # Injected from a secret store in production; never logged

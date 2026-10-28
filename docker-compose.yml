@@ -59,6 +59,9 @@ services:
       # the keys are fetched over the compose network.
       JWT_ISSUER_URI: http://localhost:${AUTH_PORT:-18090}/default
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI: http://auth:8080/default/jwks
+      # Pre-filled in Swagger UI's "Authorize" dialog (http://localhost:18080/swagger-ui.html); local demo only
+      OPENAPI_CLIENT_ID: orders-system
+      OPENAPI_CLIENT_SECRET: secret
     ports:
       - "${APP_PORT:-18080}:8080"
       - "${MANAGEMENT_PORT:-18081}:8081" # management port, published only for local inspection

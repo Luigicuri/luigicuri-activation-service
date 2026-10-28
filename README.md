@@ -51,12 +51,22 @@ O comando sobe quatro containers:
 
 | Serviço | Porta no host | Papel |
 |---|---|---|
-| `app` | `18080` (API) e `18081` (Actuator) | O serviço |
+| `app` | `18080` (API e Swagger UI) e `18081` (Actuator) | O serviço |
 | `postgres` | apenas rede interna | Banco de dados |
 | `provider-mock` | `18089` | Provedor externo simulado (WireMock) |
 | `auth` | `18090` | Servidor OAuth 2.0 simulado (mock-oauth2-server), que emite JWTs reais |
 
 > As portas do host ficam na faixa 18xxx porque, no Windows, a faixa 8069–8268 costuma estar reservada pelo Hyper-V. Elas podem ser trocadas com `APP_PORT`, `MANAGEMENT_PORT`, `PROVIDER_PORT` e `AUTH_PORT`.
+
+### Usando pelo navegador (Swagger UI)
+
+Com a stack no ar, abra **http://localhost:18080/swagger-ui.html**:
+
+1. Clique em **Authorize**. O `client_id` e o `client_secret` de demonstração já vêm preenchidos. Marque os escopos em **select all** e clique em **Authorize**. O próprio navegador obtém um token OAuth2 real do servidor simulado.
+2. Abra uma operação (por exemplo, `POST /api/v1/requests`), clique em **Try it out**, ajuste o corpo e clique em **Execute**.
+3. Copie o `id` da resposta e consulte em `GET /api/v1/requests/{id}`. Cerca de 1 s depois, o status é `COMPLETED`.
+
+A especificação OpenAPI fica em `/v3/api-docs`. A documentação é pública, mas toda operação exige token. Em produção, ela pode ser desligada com `SPRINGDOC_SWAGGER_UI_ENABLED=false`.
 
 ### Chamando a API
 
@@ -366,7 +376,7 @@ O que não foi implementado, e como eu faria:
 - **Migrar para Spring Boot 4.x** (Spring Framework 7, Jackson 3, Hibernate 7). O suporte OSS da 3.5 já terminou.
 - **Retenção de dados:** arquivar ou particionar as solicitações finalizadas por data. Os índices parciais já mantêm a fila pequena, mas a tabela cresce sem limite.
 - **Webhook ou evento para o consumidor**, em vez de exigir polling no `GET`.
-- **Versionamento da API** e documentação OpenAPI (springdoc), publicada pelo pipeline.
+- **Versionamento da API** e publicação da especificação OpenAPI (já gerada em `/v3/api-docs`) pelo pipeline.
 - **Testes de carga** (Gatling/k6) no pipeline, com o provedor simulado lento, para proteger contra regressões do tipo do item 10.
 - **Dashboards e alertas versionados** junto com o código (Grafana como código).
 

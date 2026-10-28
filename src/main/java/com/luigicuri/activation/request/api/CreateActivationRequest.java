@@ -6,21 +6,27 @@ import jakarta.validation.constraints.Size;
 
 import com.luigicuri.activation.request.application.CreateActivationRequestCommand;
 
+import io.swagger.v3.oas.annotations.media.Schema;
+
 /**
  * Body of {@code POST /api/v1/requests}. Identifiers are 1-64 characters of letters, digits,
  * {@code .}, {@code _} or {@code -} (R1). Messages are explicit so they do not depend on the JVM locale.
  */
 public record CreateActivationRequest(
+        @Schema(description = "Identifier of the request in the source system; unique", example = "EXT-12345")
         @NotBlank(message = "is required")
         @Size(max = 64, message = "must have at most 64 characters")
         @Pattern(regexp = IDENTIFIER, message = IDENTIFIER_MESSAGE)
         String externalId,
 
+        @Schema(example = "CUST-10001")
         @NotBlank(message = "is required")
         @Size(max = 64, message = "must have at most 64 characters")
         @Pattern(regexp = IDENTIFIER, message = IDENTIFIER_MESSAGE)
         String customerId,
 
+        @Schema(description = "In the local provider mock: INVALID-PRODUCT is rejected, UNAVAILABLE-PRODUCT and "
+                + "SLOW-PRODUCT fail temporarily", example = "INTERNET-500")
         @NotBlank(message = "is required")
         @Size(max = 64, message = "must have at most 64 characters")
         @Pattern(regexp = IDENTIFIER, message = IDENTIFIER_MESSAGE)

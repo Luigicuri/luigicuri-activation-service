@@ -34,6 +34,8 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(authorize -> authorize
                         // Actuator is served on a separate management port that is not exposed publicly (R8.6)
                         .requestMatchers(EndpointRequest.toAnyEndpoint()).permitAll()
+                        // API documentation is public; every operation it lists still requires a token
+                        .requestMatchers("/swagger-ui.html", "/swagger-ui/**", "/v3/api-docs/**").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/v1/requests").hasAuthority(SCOPE_WRITE)
                         .requestMatchers(HttpMethod.GET, "/api/v1/requests", "/api/v1/requests/*")
                         .hasAuthority(SCOPE_READ)
