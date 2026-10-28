@@ -22,10 +22,10 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 **Checkpoint 2:** domínio, API, erros e duplicidade (o núcleo da avaliação).
 
 ## Fase 3 — Integração com o provedor
-- [ ] T3.1 `ProviderClient` (`RestClient`, timeouts, headers) + `ProviderResult` + testes de classificação — R5.3, R5.4, R5.5
-- [ ] T3.2 `RetryPolicy` (backoff com jitter, `Retry-After`) + teste unitário — R5.6
-- [ ] T3.3 `ActivationWorker` com `SKIP LOCKED` + testes de integração com WireMock (sucesso, 400, 500→sucesso, timeout, 429, limite de tentativas) — R5.1, R5.2, R5.8
-- [ ] T3.4 Reconciliação de `PROCESSING` com lease vencido + teste — R5.7
+- [x] T3.1 `ProviderClient` (`RestClient`, timeouts, headers) + `ProviderResult` + testes de classificação — R5.3, R5.4, R5.5
+- [x] T3.2 `RetryPolicy` (backoff com jitter, `Retry-After`) + teste unitário — R5.6
+- [x] T3.3 `ActivationWorker` com `SKIP LOCKED` + testes de integração com WireMock (sucesso, 400, 500→sucesso, timeout, 429, limite de tentativas) — R5.1, R5.2, R5.8
+- [x] T3.4 Reconciliação de `PROCESSING` com lease vencido + teste — R5.7
 
 **Checkpoint 3:** fluxo assíncrono ponta a ponta.
 

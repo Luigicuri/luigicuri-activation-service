@@ -60,7 +60,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 |---|---|---|
 | 2xx | `COMPLETED` | — |
 | 400 e demais 4xx não listados | `FAILED` | Não |
-| 408, 500, 502, 504 | `PENDING` (agendado) | Sim, com backoff |
+| 408 e 5xx (exceto 503) | `PENDING` (agendado) | Sim, com backoff |
 | Timeout de conexão ou de leitura, erro de I/O | `PENDING` (agendado) | Sim, com backoff |
 | 429 / 503 | `PENDING` (agendado) | Sim, respeitando o `Retry-After` quando presente [D] |
 | Limite de tentativas atingido | `FAILED` | Não |

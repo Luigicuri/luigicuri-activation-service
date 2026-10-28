@@ -11,7 +11,7 @@ O provedor pode responder com sucesso, com erro definitivo (o pedido é inválid
 |---|---|---|---|
 | 2xx | `COMPLETED` | — | Ativação confirmada |
 | 400 e demais 4xx | `FAILED` | Não | O pedido em si é rejeitado. Repetir o mesmo pedido não muda o resultado |
-| 408, 500, 502, 504 | `PENDING` | Sim, com backoff | Falha do lado do provedor ou da rede, provavelmente passageira |
+| 408 e 5xx (exceto 503) | `PENDING` | Sim, com backoff | Falha do lado do provedor ou da rede, provavelmente passageira |
 | Timeout / erro de I/O | `PENDING` | Sim, com backoff | Resultado desconhecido. É seguro repetir porque a `Idempotency-Key` impede a ativação duplicada |
 | 429 / 503 | `PENDING` | Sim, respeitando o `Retry-After` | O provedor diz explicitamente quando tentar de novo |
 | Limite de tentativas | `FAILED` | Não | Evita retry infinito. O registro fica com `failureReason` para análise |

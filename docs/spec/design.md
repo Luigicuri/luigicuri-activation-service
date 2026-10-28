@@ -151,6 +151,10 @@ ReconciliationJob (@Scheduled, padrão 30s)
 - **Garantia de entrega (R5.1):** o registro é gravado como `PENDING` no commit do `POST`. Se a aplicação cair antes de chamar o provedor, o worker pega o registro no próximo ciclo. Se cair durante a chamada, a reconciliação devolve o registro para a fila. A entrega é *at-least-once*. A duplicidade no provedor é evitada pela `Idempotency-Key`.
 - **Várias instâncias (R5.8):** `SKIP LOCKED` faz cada instância pegar um lote diferente sem bloqueio entre elas.
 - **Resposta de 2xx ou 4xx perdida depois de um timeout:** o retry reenvia a mesma `Idempotency-Key`, e um provedor idempotente devolve o resultado original.
+- **Resultado atrasado:** cada claim leva o número da tentativa (`attempts` no momento do claim). O resultado só é gravado se o registro continua `PROCESSING` **na mesma tentativa**. Se o lease venceu e o registro foi liberado ou reclamado de novo, a resposta tardia é descartada com um log. O `@Version` cobre a escrita concorrente que ainda escape dessa checagem.
+- **Lease vs timeouts:** `lease-timeout` (2min) precisa ser maior que `batch-size × (connect-timeout + read-timeout)` (10 × 7s), senão um lote lento seria reclamado durante a própria execução.
+- **Desligamento:** o pool de agendamento espera até 30s pela tarefa em andamento (`await-termination`), para que uma chamada já feita tenha o resultado gravado. O que não terminar a tempo é recuperado pela reconciliação.
+- **Testes:** o worker fica desligado (`activation.processing.enabled=false`) nos testes de integração e é chamado diretamente, um ciclo por chamada. Assim os cenários são determinísticos. Um único teste (`ScheduledProcessingIT`) liga o agendador e valida o fluxo de ponta a ponta com Awaitility.
 
 ### Classificação do retorno (R5.3)
 
