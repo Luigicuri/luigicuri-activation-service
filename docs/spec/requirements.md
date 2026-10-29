@@ -82,7 +82,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 ## R7 — Tratamento de erros [O]
 
 - **R7.1** Todas as respostas de erro usam `application/problem+json` (RFC 9457) com `type`, `title`, `status`, `detail`, `instance` e `traceId` [D].
-- **R7.2** Erros de validação incluem `errors: [{field, message}]`.
+- **R7.2** Erros de validação incluem `errors: [{field, message}]`, em ordem estável (por campo e mensagem).
 - **R7.3** Erro inesperado → `500` com mensagem genérica. Nenhum stack trace, nome de classe ou SQL é exposto. O detalhe vai para o log com o mesmo `traceId`.
 - **R7.4** Erros de integração não chegam ao consumidor da API como erro HTTP, já que o processamento é assíncrono. Eles ficam refletidos no status (`FAILED` com `failureReason`) e nos logs e métricas.
 

@@ -7,6 +7,8 @@ import static com.luigicuri.activation.request.persistence.ActivationRequestSpec
 import java.time.Clock;
 import java.util.UUID;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -24,6 +26,8 @@ import com.luigicuri.activation.shared.correlation.CorrelationId;
 public class ActivationRequestService {
 
     static final String EXTERNAL_ID_CONSTRAINT = "uk_activation_request_external_id";
+
+    private static final Logger log = LoggerFactory.getLogger(ActivationRequestService.class);
 
     private final ActivationRequestRepository repository;
     private final Clock clock;
@@ -45,7 +49,10 @@ public class ActivationRequestService {
         var request = ActivationRequest.create(command.externalId(), command.customerId(),
                 command.productCode(), clientId, CorrelationId.current(), clock.instant());
         try {
-            return new CreationResult.Created(repository.saveAndFlush(request));
+            var created = repository.saveAndFlush(request);
+            // First log line of the request's life; the worker logs the rest under the same traceId (R9.2).
+            log.info("Activation request {} created for externalId {}", created.getId(), created.getExternalId());
+            return new CreationResult.Created(created);
         } catch (DataIntegrityViolationException e) {
             if (!ConstraintViolations.isViolationOf(e, EXTERNAL_ID_CONSTRAINT)) {
                 throw e;
@@ -68,6 +75,8 @@ public class ActivationRequestService {
                     "The externalId '%s' was already used with a different customerId or productCode."
                             .formatted(command.externalId()));
         }
+        log.info("Retry of externalId {} answered with existing activation request {}",
+                command.externalId(), existing.getId());
         return new CreationResult.AlreadyExists(existing);
     }
 

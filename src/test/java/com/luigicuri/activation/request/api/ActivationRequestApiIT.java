@@ -11,8 +11,11 @@ import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
@@ -64,6 +67,20 @@ class ActivationRequestApiIT {
                 .andExpect(jsonPath("$.customerId").value("CUST-10001"))
                 .andExpect(jsonPath("$.productCode").value("INTERNET-500"))
                 .andExpect(jsonPath("$.updatedAt").value(matchesPattern(UTC_ISO_8601)));
+    }
+
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    @DisplayName("R9.2 the creation is logged under the caller's correlation id")
+    void creationIsLoggedWithTheCorrelationId(CapturedOutput output) throws Exception {
+        mockMvc.perform(post("/api/v1/requests")
+                        .header("X-Correlation-Id", "trace-create-1")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(body("EXT-LOG", "CUST-1", "INTERNET-500")))
+                .andExpect(status().isCreated());
+
+        assertThat(output.getOut())
+                .containsPattern("\\[trace-create-1\\].*Activation request \\S+ created for externalId EXT-LOG");
     }
 
     @Test

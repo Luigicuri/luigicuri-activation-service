@@ -1,5 +1,6 @@
 package com.luigicuri.activation.shared.error;
 
+import java.util.Comparator;
 import java.util.List;
 
 import org.slf4j.Logger;
@@ -32,6 +33,10 @@ import com.luigicuri.activation.shared.web.RequestBodySizeLimitFilter;
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
+
+    private static final Comparator<FieldViolation> VIOLATION_ORDER = Comparator
+            .comparing(FieldViolation::field)
+            .thenComparing(FieldViolation::message, Comparator.nullsFirst(Comparator.naturalOrder()));
 
     @ExceptionHandler(ResourceNotFoundException.class)
     ResponseEntity<Object> handleNotFound(ResourceNotFoundException ex) {
@@ -115,10 +120,11 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return response;
     }
 
+    /** Sorted by field, then message: the validator reports violations in no fixed order. */
     private static ProblemDetail validationProblem(List<FieldViolation> violations) {
         var problem = Problems.of(HttpStatus.BAD_REQUEST, "validation-error", "Invalid data",
                 "One or more fields failed validation.");
-        problem.setProperty("errors", violations);
+        problem.setProperty("errors", violations.stream().sorted(VIOLATION_ORDER).toList());
         return problem;
     }
 

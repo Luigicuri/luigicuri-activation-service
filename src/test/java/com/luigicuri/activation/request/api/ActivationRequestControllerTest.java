@@ -1,6 +1,6 @@
 package com.luigicuri.activation.request.api;
 
-import static org.hamcrest.Matchers.containsInAnyOrder;
+import static org.hamcrest.Matchers.contains;
 import static org.hamcrest.Matchers.endsWith;
 import static org.hamcrest.Matchers.matchesPattern;
 import static org.hamcrest.Matchers.containsString;
@@ -160,7 +160,7 @@ class ActivationRequestControllerTest {
                     .andExpect(jsonPath("$.instance").value("/api/v1/requests"))
                     .andExpect(jsonPath("$.traceId").isNotEmpty())
                     .andExpect(jsonPath("$.errors[*].field",
-                            containsInAnyOrder("externalId", "customerId", "productCode")))
+                            contains("customerId", "externalId", "productCode")))
                     .andExpect(jsonPath("$.errors[?(@.field == 'customerId')].message").value("is required"));
         }
 
@@ -170,7 +170,11 @@ class ActivationRequestControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(body("   ", "CUST-1", "INTERNET-500")))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.errors[0].field").value("externalId"));
+                    // Two violations on the same field come back in a stable order too (by message)
+                    .andExpect(jsonPath("$.errors[*].field", contains("externalId", "externalId")))
+                    .andExpect(jsonPath("$.errors[0].message").value("is required"))
+                    .andExpect(jsonPath("$.errors[1].message")
+                            .value("must contain only letters, digits, '.', '_' or '-'"));
         }
 
         @Test
