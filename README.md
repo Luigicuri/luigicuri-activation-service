@@ -3,7 +3,7 @@
 Serviço de ativação de produtos de clientes. Ele registra solicitações, permite consultar o status e realiza a ativação por meio de um provedor externo.
 
 **Stack:** Java 21 · Spring Boot 3.5 (Spring MVC, Spring Data JPA/Hibernate, Spring Security) · PostgreSQL 16 · Flyway · Maven · Docker.
-**Testes:** 151 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
+**Testes:** 154 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
 
 | Documento | Conteúdo |
 |---|---|
@@ -36,6 +36,11 @@ Serviço de ativação de produtos de clientes. Ele registra solicitações, per
 ## Como executar
 
 **Pré-requisitos:** JDK 21 e Docker em execução. Os testes de integração usam Testcontainers.
+
+```bash
+git clone https://github.com/Luigicuri/luigicuri-activation-service.git
+cd luigicuri-activation-service
+```
 
 ### Testes
 
@@ -127,6 +132,19 @@ Todas as rotas também podem responder `401` (sem token ou token inválido) e `4
 
 **Validação de `externalId`, `customerId` e `productCode`:** obrigatórios, de 1 a 64 caracteres, contendo apenas letras, dígitos, `.`, `_` ou `-`.
 **Paginação:** `page` ≥ 0 (padrão 0) e `size` entre 1 e 100 (padrão 20). Ordenação por `createdAt` decrescente.
+
+**Índices que sustentam as consultas** (migração [V1](src/main/resources/db/migration/V1__create_activation_request.sql)):
+
+| Índice | Atende | Justificativa |
+|---|---|---|
+| `UNIQUE (external_id)` | Duplicidade | Garante a unicidade e também serve à releitura do registro existente no fluxo de retry |
+| `(client_id, created_at DESC)` | Listagem sem filtro | Toda listagem é filtrada pelo dono (isolamento entre clientes) e ordenada pela data; o índice resolve as duas coisas sem ordenação em memória |
+| `(client_id, status, created_at DESC)` | Filtro por `status` | Igualdade em `client_id` e `status`, seguida da ordenação |
+| `(client_id, customer_id, created_at DESC)` | Filtro por `customerId` | Idem; com os dois filtros, este é o escolhido (`customerId` é mais seletivo) e o `status` é filtrado no resultado |
+| `(next_attempt_at) WHERE status = 'PENDING'` | Fila do worker | Índice **parcial**: contém só a fila, que é pequena; os registros finalizados, que são a maioria, ficam de fora |
+| `(processing_started_at) WHERE status = 'PROCESSING'` | Reconciliação | Mesmo raciocínio: só os registros em andamento |
+
+Os índices compostos começam por `client_id` porque nenhuma consulta da API acontece sem ele. Um índice só em `status` teria baixa seletividade (quatro valores) e não ajudaria a ordenação.
 **Datas:** UTC, ISO-8601 (ex.: `2026-10-26T14:03:11.123Z`).
 
 **Erros** seguem o RFC 9457 (`application/problem+json`) e trazem um `traceId` igual ao dos logs:
@@ -375,6 +393,7 @@ O que não foi implementado, e como eu faria:
 | Reprocessar solicitações `FAILED` | Endpoint administrativo, com escopo próprio e auditoria, que devolve a solicitação para `PENDING` |
 | Unicidade de `externalId` por sistema consumidor | Hoje a unicidade é global, seguindo o enunciado. Se cada sistema de origem gerar suas próprias chaves, a constraint deveria ser `UNIQUE (client_id, external_id)` |
 | URIs dos tipos de problema | `https://api.luigicuri.dev/problems/...` são identificadores estáveis, mas não apontam para páginas publicadas |
+| Resposta quando o banco cai | Hoje o `POST` espera até 30 s (tempo padrão do pool de conexões) e responde `500` genérico. Reduziria `spring.datasource.hikari.connection-timeout` para poucos segundos e mapearia a falta de conexão para `503` com `Retry-After`, mais útil para o cliente |
 | Contrato de idempotência com o provedor | A solução assume que o provedor respeita `Idempotency-Key`. Isso precisa estar acordado e testado com ele |
 
 ---
