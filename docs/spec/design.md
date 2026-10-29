@@ -65,7 +65,8 @@ Transições (R6): só por métodos de domínio. Cada um valida o estado atual e
              startProcessing()          complete()
   PENDING ───────────────────▶ PROCESSING ─────────▶ COMPLETED
      ▲                            │   │
-     │ scheduleRetry(at, reason)  │   │ fail(reason)
+     │ scheduleRetry(at)          │   │ fail(reason)
+     │ postpone(at) (401/403)     │   │
      └────────────────────────────┘   └──────────────▶ FAILED
 ```
 
@@ -141,6 +142,7 @@ ActivationWorker (@Scheduled, fixedDelay configurável, padrão 1s)
   │   PermanentFailure  → fail(reason)                            │
   │   TransientFailure  → attempts < max ? scheduleRetry(at)      │
   │                                       : fail("max attempts")  │
+  │   CredentialsRejected → postpone(+1min), sem gastar tentativa │
   └─ commit (@Version protege contra escrita concorrente) ───────┘
 
 Reconciliação (ActivationWorker.releaseExpiredClaims, @Scheduled, padrão 30s)
@@ -164,6 +166,7 @@ sealed interface ProviderResult {
   record Success() implements ProviderResult {}
   record PermanentFailure(String reason) implements ProviderResult {}
   record TransientFailure(String reason, Optional<Duration> retryAfter) implements ProviderResult {}
+  record CredentialsRejected(String reason) implements ProviderResult {} // 401/403: postpone(), sem contar tentativa
 }
 ```
 

@@ -3,7 +3,7 @@
 Serviço de ativação de produtos de clientes. Ele registra solicitações, permite consultar o status e realiza a ativação por meio de um provedor externo.
 
 **Stack:** Java 21 · Spring Boot 3.5 (Spring MVC, Spring Data JPA/Hibernate, Spring Security) · PostgreSQL 16 · Flyway · Maven · Docker.
-**Testes:** 154 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
+**Testes:** 162 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
 
 | Documento | Conteúdo |
 |---|---|
@@ -93,7 +93,7 @@ Pontos do desenho:
 
 - **Resposta rápida:** o `POST` só grava e responde. A latência do provedor não afeta o consumidor.
 - **Nenhuma transação aberta durante a chamada HTTP:** o claim (TX 1) e a gravação do resultado (TX 2) são curtos. Um provedor lento não segura conexões do pool nem locks.
-- **Falhas:** 2xx → `COMPLETED`; demais 4xx → `FAILED`; 408, 429, 5xx e timeout → nova tentativa (429 e 503 respeitam `Retry-After`) com backoff exponencial e jitter, até 5 tentativas ([ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md)).
+- **Falhas:** 2xx → `COMPLETED`; `401`/`403` → volta para a fila sem gastar tentativa (a credencial errada é nossa, não do pedido); demais 4xx → `FAILED`; 408, 429, 5xx e timeout → nova tentativa (429 e 503 respeitam `Retry-After`) com backoff exponencial e jitter, até 5 tentativas ([ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md)).
 - **Entrega *at-least-once*:** se a instância cair no meio, a reconciliação devolve o registro para a fila. A `Idempotency-Key` evita ativação duplicada no provedor.
 
 O detalhamento de cada etapa está em [docs/spec/design.md](docs/spec/design.md).
@@ -258,7 +258,7 @@ PENDING ──▶ PROCESSING ──▶ COMPLETED
    └─ retry ─────┴────────▶ FAILED
 ```
 
-As transições são feitas por métodos do domínio (`startProcessing`, `complete`, `scheduleRetry`, `fail`), que rejeitam qualquer outra combinação. Não existem setters de status. `@Version` protege contra escrita concorrente.
+As transições são feitas por métodos do domínio (`startProcessing`, `complete`, `scheduleRetry`, `postpone`, `fail`), que rejeitam qualquer outra combinação. Não existem setters de status. `@Version` protege contra escrita concorrente.
 
 **Falha temporária volta para `PENDING`** com `attempts++` e `nextAttemptAt`, em vez de permanecer em `PROCESSING` com um contador. Assim, `PROCESSING` significa apenas "uma instância está chamando o provedor agora", e um `PROCESSING` antigo é sempre uma anomalia (a instância caiu), tratada pela reconciliação ([ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md)).
 
@@ -286,10 +286,11 @@ As transições são feitas por métodos do domínio (`startProcessing`, `comple
 | Retorno do provedor | Novo status | Nova tentativa? | Justificativa |
 |---|---|---|---|
 | `2xx` | `COMPLETED` | — | Ativação confirmada |
-| `400` (e demais `4xx`) | `FAILED` | Não | O pedido em si foi rejeitado; repetir não muda o resultado |
+| `400` (e demais `4xx`, exceto `401`/`403`) | `FAILED` | Não | O pedido em si foi rejeitado; repetir não muda o resultado |
+| `401` / `403` | `PENDING` | Sim, a cada 1 min, **sem gastar tentativa** | A credencial recusada é a **nossa**: o problema é de configuração, não do pedido. Marcar `FAILED` perderia todas as solicitações do período; elas aguardam a correção e são concluídas depois dela. Cada recusa gera log `ERROR` e a métrica `activation.provider.calls{outcome=credentials_rejected}`, que deve ter alerta |
 | `500` (e `408`, demais `5xx`) | `PENDING` | Sim, com backoff exponencial e jitter | Falha provavelmente passageira |
 | Timeout / erro de conexão | `PENDING` | Sim, com backoff | O resultado é desconhecido. É seguro repetir porque a `Idempotency-Key` impede a ativação duplicada |
-| `429` / `503` com `Retry-After` | `PENDING` | Sim, no momento indicado pelo provedor | O provedor diz quando voltar |
+| `429` / `503` com `Retry-After` | `PENDING` | Sim, no momento indicado pelo provedor (limitado ao teto de 5 min do backoff) | O provedor diz quando voltar |
 | Limite de tentativas (5) atingido | `FAILED` | Não | Evita retry infinito; o `failureReason` registra o último erro |
 
 **Por que assíncrono:** o tempo de resposta da API deixa de depender do provedor. No cenário do item 10, o provedor passa de 400 ms para 3 s. Num fluxo síncrono, isso prenderia threads e conexões da API inteira.
@@ -462,7 +463,7 @@ O que não foi implementado, e como eu faria:
 | URIs dos tipos de problema | `https://api.luigicuri.dev/problems/...` são identificadores estáveis, mas não apontam para páginas publicadas |
 | Resposta quando o banco cai | Hoje o `POST` espera até 30 s (tempo padrão do pool de conexões) e responde `500` genérico. Reduziria `spring.datasource.hikari.connection-timeout` para poucos segundos e mapearia a falta de conexão para `503` com `Retry-After`, mais útil para o cliente |
 | Contrato de idempotência com o provedor | A solução assume que o provedor respeita `Idempotency-Key`. Isso precisa estar acordado e testado com ele |
-| Provedor respondendo `401`/`403` | Hoje cai na regra "demais 4xx" e vira `FAILED` definitivo. Mas `401`/`403` indicam um problema da **nossa** credencial, não do pedido: uma chave expirada falharia todas as solicitações do período. Trataria esses códigos como falha do serviço: pausar o processamento (circuit breaker), alertar e não gastar tentativas |
+| Pausa global com credencial recusada | Com `401`/`403`, cada solicitação é adiada em 1 min sem gastar tentativa, mas o worker ainda faz uma chamada por solicitação a cada minuto. Um circuit breaker pausaria o processamento inteiro até a credencial ser corrigida. Se o contrato do provedor usar `403` para recusas de negócio, esse código deve voltar para a regra de `FAILED` |
 | `FAILED` depois de esgotar as tentativas por timeout | Depois de um timeout, o resultado no provedor é desconhecido: ele pode ter ativado. Hoje o status fica `FAILED`, com o motivo em `failureReason`. Com um endpoint de consulta no provedor, eu confirmaria o estado pela `Idempotency-Key` antes de declarar a falha, ou usaria um status próprio (por exemplo, `UNKNOWN`) para tratamento manual |
 | Vazão do worker | Cada instância chama o provedor uma solicitação por vez. Com o provedor a 3 s (cenário do item 10), são cerca de 20 ativações por minuto por instância. A latência da API não é afetada, mas a fila cresce. Escalaria com mais instâncias (o `SKIP LOCKED` já permite) ou com chamadas paralelas limitadas dentro do lote (por exemplo, virtual threads com semáforo), recalculando o lease |
 | Paginação por offset | Cada página executa também um `count(*)`, e páginas profundas ficam caras. Para volumes grandes, trocaria por paginação por cursor (`createdAt`, `id`), que os índices já suportam |
@@ -493,7 +494,7 @@ O maior risco de desenvolver com IA é gerar código antes de decidir *o que* co
 1. **Análise:** leitura do enunciado e dos requisitos da vaga; separação entre obrigatórios e diferenciais; definição do que implementar e do que apenas descrever no README.
 2. **Especificação** ([`docs/spec`](docs/spec) e [`docs/adr`](docs/adr)): requisitos R1–R10 com critérios de aceite numerados, design e plano de tarefas. Para cada decisão estrutural, as alternativas foram comparadas antes da escolha (ex.: processamento síncrono, `@Async` ou tabela como fila; `UNIQUE` com tratamento da violação, `ON CONFLICT` ou lock; segurança descrita ou implementada; Spring Boot 3.5 ou 4.x). A spec foi aprovada antes de qualquer linha de código.
 3. **Implementação incremental:** cinco fases (fundação, domínio e API, integração, segurança, operação). Cada tarefa virou um ou mais commits pequenos que citam a tarefa do plano (ex.: `T3.3`); o [`tasks.md`](docs/spec/tasks.md) liga cada tarefa aos requisitos que ela atende. Cada fase terminou num **checkpoint de revisão**.
-4. **Verificação:** testes automatizados como critério de pronto (154 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
+4. **Verificação:** testes automatizados como critério de pronto (162 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
 
 ### Divisão de papéis
 

@@ -45,3 +45,7 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T5.6 README completo, incluindo o cenário de análise do item 10 — R10.6
 
 **Checkpoint 5:** revisão final + simulação do code review da entrevista.
+
+## Revisão crítica pós-implementação
+- [x] T6.1 Provedor recusando a credencial do serviço (401/403): adiar sem gastar tentativa, em vez de `FAILED` + testes — R5.3
+- [x] T6.2 `scheduleRetry` valida a entrada antes de alterar o estado (mesmo padrão da correção em `fail`) — R6.2

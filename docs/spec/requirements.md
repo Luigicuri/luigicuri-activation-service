@@ -60,6 +60,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 |---|---|---|
 | 2xx | `COMPLETED` | — |
 | 400 e demais 4xx não listados | `FAILED` | Não |
+| 401 / 403 (credencial do serviço recusada) | `PENDING` (adiado) | Sim, em intervalo fixo, sem contar tentativa |
 | 408 e 5xx (exceto 503) | `PENDING` (agendado) | Sim, com backoff |
 | Timeout de conexão ou de leitura, erro de I/O | `PENDING` (agendado) | Sim, com backoff |
 | 429 / 503 | `PENDING` (agendado) | Sim, respeitando o `Retry-After` quando presente [D] |
@@ -73,7 +74,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 
 ## R6 — Máquina de estados [D]
 
-- **R6.1** Transições válidas: `PENDING → PROCESSING`, `PROCESSING → COMPLETED`, `PROCESSING → FAILED`, `PROCESSING → PENDING` (retry).
+- **R6.1** Transições válidas: `PENDING → PROCESSING`, `PROCESSING → COMPLETED`, `PROCESSING → FAILED`, `PROCESSING → PENDING` (retry, ou adiamento quando o provedor recusa a credencial do serviço).
 - **R6.2** Qualquer outra transição lança uma exceção de domínio. `COMPLETED` e `FAILED` são estados finais.
 - **R6.3** As transições são feitas por métodos do domínio, sem setters livres. Há teste unitário sem Spring.
 - **R6.4** Atualizações concorrentes do mesmo registro são protegidas por lock otimista (`@Version`).
