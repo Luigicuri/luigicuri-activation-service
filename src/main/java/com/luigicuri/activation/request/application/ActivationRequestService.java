@@ -21,6 +21,7 @@ import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.persistence.ActivationRequestRepository;
 import com.luigicuri.activation.request.persistence.ConstraintViolations;
 import com.luigicuri.activation.shared.correlation.CorrelationId;
+import com.luigicuri.activation.shared.tracing.TraceContexts;
 
 @Service
 public class ActivationRequestService {
@@ -30,10 +31,13 @@ public class ActivationRequestService {
     private static final Logger log = LoggerFactory.getLogger(ActivationRequestService.class);
 
     private final ActivationRequestRepository repository;
+    private final TraceContexts traceContexts;
     private final Clock clock;
 
-    public ActivationRequestService(ActivationRequestRepository repository, Clock clock) {
+    public ActivationRequestService(ActivationRequestRepository repository, TraceContexts traceContexts,
+                                    Clock clock) {
         this.repository = repository;
+        this.traceContexts = traceContexts;
         this.clock = clock;
     }
 
@@ -47,7 +51,8 @@ public class ActivationRequestService {
      */
     public CreationResult create(CreateActivationRequestCommand command, String clientId) {
         var request = ActivationRequest.create(command.externalId(), command.customerId(),
-                command.productCode(), clientId, CorrelationId.current(), clock.instant());
+                command.productCode(), clientId, CorrelationId.current(), traceContexts.currentTraceParent(),
+                clock.instant());
         try {
             var created = repository.saveAndFlush(request);
             // First log line of the request's life; the worker logs the rest under the same traceId (R9.2).

@@ -22,7 +22,7 @@ class ActivationRequestTest {
     private static final Instant T1 = T0.plusSeconds(1);
 
     private static ActivationRequest newRequest() {
-        return ActivationRequest.create("EXT-1", "CUST-1", "INTERNET-500", "client-a", "trace-1", T0);
+        return ActivationRequest.create("EXT-1", "CUST-1", "INTERNET-500", "client-a", "trace-1", null, T0);
     }
 
     @Test

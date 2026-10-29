@@ -25,7 +25,19 @@ public final class Problems {
         var problem = ProblemDetail.forStatusAndDetail(status, detail);
         problem.setType(URI.create(BASE_URI + slug));
         problem.setTitle(title);
-        problem.setProperty("traceId", CorrelationId.current());
+        return identified(problem);
+    }
+
+    /**
+     * Adds what finds the error in the logs and in the tracing UI: the correlationId always, the traceId
+     * whenever the request is being traced.
+     */
+    public static ProblemDetail identified(ProblemDetail problem) {
+        problem.setProperty("correlationId", CorrelationId.current());
+        var traceId = CorrelationId.currentTraceId();
+        if (traceId != null) {
+            problem.setProperty("traceId", traceId);
+        }
         return problem;
     }
 

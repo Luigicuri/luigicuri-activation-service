@@ -24,12 +24,12 @@ import org.springframework.web.method.annotation.HandlerMethodValidationExceptio
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 import org.springframework.web.servlet.mvc.method.annotation.ResponseEntityExceptionHandler;
 
-import com.luigicuri.activation.shared.correlation.CorrelationId;
 import com.luigicuri.activation.shared.web.RequestBodySizeLimitFilter;
 
 /**
- * Maps every error to {@code application/problem+json} (RFC 9457) with a {@code traceId} that
- * matches the logs. Internal details (stack traces, SQL, class names) never reach the client (R7).
+ * Maps every error to {@code application/problem+json} (RFC 9457) with the {@code traceId} and
+ * {@code correlationId} that find it in the logs. Internal details (stack traces, SQL, class names) never
+ * reach the client (R7).
  */
 @RestControllerAdvice
 public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
@@ -77,7 +77,7 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> handleUnexpected(Exception ex) {
         log.error("Unexpected error", ex);
         return respond(Problems.of(HttpStatus.INTERNAL_SERVER_ERROR, "internal-error", "Internal error",
-                "An unexpected error occurred. Report the traceId to get it investigated."));
+                "An unexpected error occurred. Report the traceId or correlationId to get it investigated."));
     }
 
     @Override
@@ -127,13 +127,13 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
         return handleExceptionInternal(ex, malformed, headers, status, request);
     }
 
-    /** Every response produced by the base class (405, 415, 406...) also gets the traceId. */
+    /** Every response produced by the base class (405, 415, 406...) also gets the identifiers. */
     @Override
     protected ResponseEntity<Object> handleExceptionInternal(Exception ex, Object body, HttpHeaders headers,
             HttpStatusCode statusCode, WebRequest request) {
         var response = super.handleExceptionInternal(ex, body, headers, statusCode, request);
         if (response != null && response.getBody() instanceof ProblemDetail problemDetail) {
-            problemDetail.setProperty("traceId", CorrelationId.current());
+            Problems.identified(problemDetail);
         }
         return response;
     }

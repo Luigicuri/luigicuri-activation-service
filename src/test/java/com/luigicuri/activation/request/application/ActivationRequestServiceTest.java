@@ -25,6 +25,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import com.luigicuri.activation.request.domain.ActivationRequest;
 import com.luigicuri.activation.request.domain.ActivationStatus;
 import com.luigicuri.activation.request.persistence.ActivationRequestRepository;
+import com.luigicuri.activation.shared.tracing.TraceContexts;
 
 /** R4: the decision taken after the unique constraint fires. Concurrency itself is covered by an IT. */
 @ExtendWith(MockitoExtension.class)
@@ -38,11 +39,14 @@ class ActivationRequestServiceTest {
     @Mock
     ActivationRequestRepository repository;
 
+    @Mock
+    TraceContexts traceContexts;
+
     ActivationRequestService service;
 
     @BeforeEach
     void setUp() {
-        service = new ActivationRequestService(repository, Clock.fixed(NOW, ZoneOffset.UTC));
+        service = new ActivationRequestService(repository, traceContexts, Clock.fixed(NOW, ZoneOffset.UTC));
     }
 
     @Test
@@ -55,6 +59,18 @@ class ActivationRequestServiceTest {
         assertThat(result.request().getStatus()).isEqualTo(ActivationStatus.PENDING);
         assertThat(result.request().getClientId()).isEqualTo(CLIENT);
         assertThat(result.request().getCreatedAt()).isEqualTo(NOW);
+    }
+
+    @Test
+    @DisplayName("R9.2 the creating request's trace is stored, so the worker can continue it")
+    void currentTraceIsStoredWithTheRequest() {
+        var traceParent = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01";
+        given(traceContexts.currentTraceParent()).willReturn(traceParent);
+        given(repository.saveAndFlush(any())).willAnswer(invocation -> invocation.getArgument(0));
+
+        var result = service.create(COMMAND, CLIENT);
+
+        assertThat(result.request().getTraceParent()).isEqualTo(traceParent);
     }
 
     @Test
@@ -114,7 +130,7 @@ class ActivationRequestServiceTest {
     }
 
     private static ActivationRequest existing(String customerId, String productCode, String clientId) {
-        return ActivationRequest.create("EXT-1", customerId, productCode, clientId, null, NOW.minusSeconds(5));
+        return ActivationRequest.create("EXT-1", customerId, productCode, clientId, null, null, NOW.minusSeconds(5));
     }
 
     private static DataIntegrityViolationException violationOf(String constraint) {

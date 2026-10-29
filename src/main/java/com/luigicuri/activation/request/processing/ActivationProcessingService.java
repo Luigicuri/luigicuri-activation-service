@@ -53,14 +53,33 @@ public class ActivationProcessingService {
 
     @Transactional
     public void recordResult(ClaimedActivation claim, ProviderResult result) {
+        stillClaimed(claim).ifPresent(request -> applyResult(request, result));
+    }
+
+    /** Hands a claimed request back without a provider call (the circuit is open); its attempt is not used. */
+    @Transactional
+    public void releaseWithoutCall(ClaimedActivation claim, Duration delay) {
+        stillClaimed(claim).ifPresent(request -> {
+            var now = clock.instant();
+            request.postpone(now.plus(delay), now);
+            log.warn("Provider circuit is open: request {} postponed to {} without using an attempt",
+                    request.getId(), request.getNextAttemptAt());
+            countTransition(request);
+        });
+    }
+
+    /** The request, unless the lease expired and it was released (and maybe claimed again) meanwhile. */
+    private Optional<ActivationRequest> stillClaimed(ClaimedActivation claim) {
         var request = repository.findById(claim.id()).orElseThrow();
         if (request.getStatus() != ActivationStatus.PROCESSING || request.getAttempts() != claim.attempt()) {
-            // The lease expired and the request was released (and maybe claimed again) meanwhile.
-            log.warn("Discarding outdated provider result for request {} (attempt {}); it is now {} on attempt {}",
+            log.warn("Discarding outdated update for request {} (attempt {}); it is now {} on attempt {}",
                     claim.id(), claim.attempt(), request.getStatus(), request.getAttempts());
-            return;
+            return Optional.empty();
         }
+        return Optional.of(request);
+    }
 
+    private void applyResult(ActivationRequest request, ProviderResult result) {
         var now = clock.instant();
         switch (result) {
             case ProviderResult.Success success -> {

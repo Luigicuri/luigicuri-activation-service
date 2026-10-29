@@ -1,7 +1,7 @@
-# Local environment: application + PostgreSQL + provider mock + OAuth2 authorization server mock.
+# Local environment: application + PostgreSQL + provider mock + OAuth2 authorization server mock + Jaeger.
 #   docker compose up --build
 # Host ports default to the 18xxx range (8080-8268 is often reserved by Hyper-V on Windows);
-# override with APP_PORT, MANAGEMENT_PORT, PROVIDER_PORT and AUTH_PORT.
+# override with APP_PORT, MANAGEMENT_PORT, PROVIDER_PORT, AUTH_PORT and JAEGER_PORT.
 # See README ("Como executar") for getting a token and calling the API.
 name: activation-service
 
@@ -40,6 +40,12 @@ services:
     ports:
       - "${AUTH_PORT:-18090}:8080"
 
+  # Distributed tracing UI (http://localhost:18686); receives spans over OTLP/HTTP
+  jaeger:
+    image: jaegertracing/all-in-one:1.62.0
+    ports:
+      - "${JAEGER_PORT:-18686}:16686"
+
   app:
     build: .
     depends_on:
@@ -48,6 +54,8 @@ services:
       provider-mock:
         condition: service_started
       auth:
+        condition: service_started
+      jaeger:
         condition: service_started
     environment:
       DB_URL: jdbc:postgresql://postgres:5432/activation
@@ -62,6 +70,7 @@ services:
       # Pre-filled in Swagger UI's "Authorize" dialog (http://localhost:18080/swagger-ui.html); local demo only
       OPENAPI_CLIENT_ID: orders-system
       OPENAPI_CLIENT_SECRET: secret
+      MANAGEMENT_OTLP_TRACING_ENDPOINT: http://jaeger:4318/v1/traces
     ports:
       - "${APP_PORT:-18080}:8080"
       - "${MANAGEMENT_PORT:-18081}:8081" # management port, published only for local inspection

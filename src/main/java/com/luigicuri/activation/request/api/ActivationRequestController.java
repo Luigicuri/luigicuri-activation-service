@@ -38,6 +38,9 @@ import io.swagger.v3.oas.annotations.tags.Tag;
         mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
 @ApiResponse(responseCode = "403", description = "Token lacks the scope this operation needs", content = @Content(
         mediaType = "application/problem+json", schema = @Schema(implementation = ProblemDetail.class)))
+@ApiResponse(responseCode = "429", description = "Client exceeded its call rate; retry after the Retry-After seconds",
+        content = @Content(mediaType = "application/problem+json",
+                schema = @Schema(implementation = ProblemDetail.class)))
 @ApiResponse(responseCode = "503", description = "Database temporarily unavailable; retry after the Retry-After seconds",
         content = @Content(mediaType = "application/problem+json",
                 schema = @Schema(implementation = ProblemDetail.class)))

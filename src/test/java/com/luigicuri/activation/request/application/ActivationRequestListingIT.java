@@ -75,7 +75,7 @@ class ActivationRequestListingIT {
 
     private void save(String externalId, String customerId, String clientId, int minutesAfterT0, boolean processing) {
         var createdAt = T0.plusSeconds(60L * minutesAfterT0);
-        var request = ActivationRequest.create(externalId, customerId, "INTERNET-500", clientId, null, createdAt);
+        var request = ActivationRequest.create(externalId, customerId, "INTERNET-500", clientId, null, null, createdAt);
         if (processing) {
             request.startProcessing(createdAt);
         }

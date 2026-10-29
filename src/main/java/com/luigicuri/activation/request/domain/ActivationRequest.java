@@ -64,6 +64,10 @@ public class ActivationRequest {
     @Column(name = "correlation_id", updatable = false)
     private String correlationId;
 
+    /** W3C traceparent of the creating request; the worker continues this trace (R9.2). */
+    @Column(name = "trace_parent", updatable = false)
+    private String traceParent;
+
     @Version
     @Column(name = "version", nullable = false)
     private Long version;
@@ -79,7 +83,8 @@ public class ActivationRequest {
     }
 
     public static ActivationRequest create(String externalId, String customerId, String productCode,
-                                           String clientId, String correlationId, Instant now) {
+                                           String clientId, String correlationId, String traceParent,
+                                           Instant now) {
         var request = new ActivationRequest();
         request.id = UUID.randomUUID();
         request.externalId = Objects.requireNonNull(externalId);
@@ -87,6 +92,7 @@ public class ActivationRequest {
         request.productCode = Objects.requireNonNull(productCode);
         request.clientId = Objects.requireNonNull(clientId);
         request.correlationId = correlationId;
+        request.traceParent = traceParent;
         request.status = PENDING;
         request.nextAttemptAt = now;
         request.createdAt = now;
@@ -205,6 +211,10 @@ public class ActivationRequest {
 
     public String getCorrelationId() {
         return correlationId;
+    }
+
+    public String getTraceParent() {
+        return traceParent;
     }
 
     public Instant getCreatedAt() {

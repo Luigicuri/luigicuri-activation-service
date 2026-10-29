@@ -62,6 +62,15 @@ management:
         http.server.requests: true
         http.client.requests: true
         activation.provider.calls: true
+  # Distributed tracing (OpenTelemetry). Spans are exported only when an OTLP endpoint is configured
+  # (MANAGEMENT_OTLP_TRACING_ENDPOINT, set in docker-compose to the local Jaeger).
+  tracing:
+    sampling:
+      probability: ${TRACING_SAMPLING_PROBABILITY:1.0}
+  observations:
+    enable:
+      # One span per security filter adds noise without telling anything the HTTP span does not
+      spring.security: false
 
 # Interactive API documentation: /swagger-ui.html (disable with SPRINGDOC_SWAGGER_UI_ENABLED=false)
 springdoc:
@@ -95,6 +104,17 @@ activation:
     reconciliation-interval: 30s
     # Provider answered 401/403: our credential is wrong, not the request. Postpone without using attempts.
     credentials-rejected-delay: 1m
+  circuit-breaker:
+    # Open after half of the last 10 calls failed (at least 5 calls); try again after 30 s with one call
+    failure-rate-threshold: 50
+    sliding-window-size: 10
+    minimum-number-of-calls: 5
+    wait-duration-in-open-state: 30s
+    permitted-calls-in-half-open-state: 1
+  rate-limit:
+    # Per client system and per instance; the gateway enforces the global limit
+    limit-for-period: ${RATE_LIMIT_PER_SECOND:50}
+    refresh-period: 1s
   retry:
     max-attempts: 5
     initial-delay: 2s
@@ -103,7 +123,7 @@ activation:
 
 logging:
   pattern:
-    level: "%5p [%X{traceId:-}]"
+    level: "%5p [%X{correlationId:-}]"
   level:
     # Duplicate externalId (SQLState 23505) is an expected outcome handled by the service (ADR-0002).
     # Unexpected database errors are still logged, with their cause, by ApiExceptionHandler.

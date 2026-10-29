@@ -91,7 +91,7 @@ class ActivationRequestControllerTest {
     }
 
     private static ActivationRequest request() {
-        return ActivationRequest.create("EXT-12345", "CUST-10001", "INTERNET-500", CLIENT, "trace",
+        return ActivationRequest.create("EXT-12345", "CUST-10001", "INTERNET-500", CLIENT, "trace", null,
                 Instant.parse("2026-10-26T14:03:11Z"));
     }
 
@@ -158,7 +158,7 @@ class ActivationRequestControllerTest {
                     .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/validation-error"))
                     .andExpect(jsonPath("$.status").value(400))
                     .andExpect(jsonPath("$.instance").value("/api/v1/requests"))
-                    .andExpect(jsonPath("$.traceId").isNotEmpty())
+                    .andExpect(jsonPath("$.correlationId").isNotEmpty())
                     .andExpect(jsonPath("$.errors[*].field",
                             contains("customerId", "externalId", "productCode")))
                     .andExpect(jsonPath("$.errors[?(@.field == 'customerId')].message").value("is required"));
@@ -281,7 +281,7 @@ class ActivationRequestControllerTest {
                     .andExpect(header().string("WWW-Authenticate", startsWith("Bearer")))
                     .andExpect(content().contentType(PROBLEM_JSON))
                     .andExpect(jsonPath("$.type").value("https://api.luigicuri.dev/problems/unauthorized"))
-                    .andExpect(jsonPath("$.traceId").isNotEmpty());
+                    .andExpect(jsonPath("$.correlationId").isNotEmpty());
         }
 
         @Test
@@ -357,13 +357,13 @@ class ActivationRequestControllerTest {
         }
 
         @Test
-        void suppliedCorrelationIdIsEchoedAndUsedAsTraceId() throws Exception {
+        void suppliedCorrelationIdIsEchoedAndReturnedInErrors() throws Exception {
             mockMvc.perform(post("/api/v1/requests")
                             .header("X-Correlation-Id", "abc-123")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
                     .andExpect(header().string("X-Correlation-Id", "abc-123"))
-                    .andExpect(jsonPath("$.traceId").value("abc-123"));
+                    .andExpect(jsonPath("$.correlationId").value("abc-123"));
         }
 
         @Test
@@ -406,7 +406,7 @@ class ActivationRequestControllerTest {
             mockMvc.perform(MockMvcRequestBuilders.delete("/api/v1/requests/{id}", UUID.randomUUID()).with(WRITER))
                     .andExpect(status().isMethodNotAllowed())
                     .andExpect(content().contentType(PROBLEM_JSON))
-                    .andExpect(jsonPath("$.traceId").isNotEmpty());
+                    .andExpect(jsonPath("$.correlationId").isNotEmpty());
         }
     }
 }

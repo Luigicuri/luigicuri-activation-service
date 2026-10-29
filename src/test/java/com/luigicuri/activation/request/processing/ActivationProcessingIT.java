@@ -30,6 +30,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.micrometer.core.instrument.MeterRegistry;
 
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
@@ -80,9 +81,14 @@ class ActivationProcessingIT {
     @Autowired
     MeterRegistry meterRegistry;
 
+    @Autowired
+    CircuitBreaker circuitBreaker;
+
     @BeforeEach
-    void cleanDatabase() {
+    void cleanState() {
         jdbcTemplate.execute("TRUNCATE activation_request");
+        // The breaker is a singleton: failures provoked by one test must not open it for the next
+        circuitBreaker.reset();
     }
 
     @Test
@@ -315,6 +321,38 @@ class ActivationProcessingIT {
     }
 
     @Test
+    @DisplayName("open circuit: a claimed request goes back to PENDING without a call and keeps its attempt")
+    void requestReleasedWithoutCallKeepsItsAttempt() {
+        var request = pendingRequest("EXT-CIRCUIT");
+        var claim = processingService.claimDue().getFirst();
+
+        processingService.releaseWithoutCall(claim, Duration.ofSeconds(30));
+
+        var stored = reload(request);
+        assertThat(stored.getStatus()).isEqualTo(ActivationStatus.PENDING);
+        assertThat(stored.getAttempts()).isZero();
+        assertThat(stored.getNextAttemptAt())
+                .isCloseTo(stored.getUpdatedAt().plusSeconds(30), within(1, ChronoUnit.SECONDS));
+        provider.verify(0, callsFor(request));
+    }
+
+    @Test
+    @DisplayName("provider down: the circuit opens and the remaining requests wait without using attempts")
+    void providerOutageOpensTheCircuit() {
+        provider.stubFor(post(ACTIVATE).willReturn(aResponse().withStatus(503)));
+        for (int i = 0; i < 8; i++) {
+            pendingRequest("EXT-OUTAGE-" + i);
+        }
+
+        worker.processDueRequests();
+
+        assertThat(circuitBreaker.getState()).isEqualTo(CircuitBreaker.State.OPEN);
+        // minimum-number-of-calls is 5: the 5th failure opens it, the other 3 are released untouched
+        assertThat(pendingWithAttempts(1)).as("called, retry scheduled").isEqualTo(5);
+        assertThat(pendingWithAttempts(0)).as("released without a call").isEqualTo(3);
+    }
+
+    @Test
     @DisplayName("requests not yet due are left alone")
     void requestsNotDueAreNotClaimed() {
         pendingRequest("EXT-LATER");
@@ -325,7 +363,7 @@ class ActivationProcessingIT {
 
     private ActivationRequest pendingRequest(String externalId) {
         return repository.save(ActivationRequest.create(externalId, "CUST-1", "INTERNET-500", "client-a",
-                "trace-" + externalId, Instant.now().minus(Duration.ofSeconds(1))));
+                "trace-" + externalId, null, Instant.now().minus(Duration.ofSeconds(1))));
     }
 
     /**
@@ -335,6 +373,12 @@ class ActivationProcessingIT {
     private static RequestPatternBuilder callsFor(ActivationRequest request) {
         return postRequestedFor(urlEqualTo(ACTIVATE))
                 .withHeader("Idempotency-Key", equalTo(request.getId().toString()));
+    }
+
+    private Integer pendingWithAttempts(int attempts) {
+        return jdbcTemplate.queryForObject(
+                "SELECT count(*) FROM activation_request WHERE status = 'PENDING' AND attempts = ?", Integer.class,
+                attempts);
     }
 
     private double activeGauge(String status) {
