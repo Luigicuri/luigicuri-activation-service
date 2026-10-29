@@ -222,8 +222,9 @@ O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é dev
 
 - Actuator: `health` (com grupos `liveness`/`readiness`) e `prometheus` na porta de gestão `8081`.
 - Métricas customizadas:
-  - `activation.provider.calls` (timer, tag `outcome=success|permanent_failure|transient_failure`)
+  - `activation.provider.calls` (timer, tag `outcome=success|permanent_failure|transient_failure|credentials_rejected`)
   - `activation.requests.transitions` (counter, tag `to=<status>`)
+  - `activation.requests.active` (gauge, tag `status=PENDING|PROCESSING`): `count` a cada coleta, barato pelos índices parciais; base dos alertas de fila parada
 - `CorrelationIdFilter`: lê ou gera o `X-Correlation-Id` e o coloca no MDC como `traceId`. O worker restaura o MDC a partir de `correlation_id` antes de chamar o provedor.
 - Logs: texto em desenvolvimento e JSON (`logging.structured.format.console=ecs`) no profile `docker`.
 

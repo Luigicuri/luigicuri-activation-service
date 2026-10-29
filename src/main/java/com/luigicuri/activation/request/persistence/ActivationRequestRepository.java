@@ -11,11 +11,15 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.luigicuri.activation.request.domain.ActivationRequest;
+import com.luigicuri.activation.request.domain.ActivationStatus;
 
 public interface ActivationRequestRepository
         extends JpaRepository<ActivationRequest, UUID>, JpaSpecificationExecutor<ActivationRequest> {
 
     Optional<ActivationRequest> findByExternalId(String externalId);
+
+    /** Size of the queue per status, for the metrics (R9.3). */
+    long countByStatus(ActivationStatus status);
 
     /** Owner-scoped lookup: another client's request is indistinguishable from a missing one (R8.4). */
     Optional<ActivationRequest> findByIdAndClientId(UUID id, String clientId);

@@ -99,7 +99,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 
 - **R9.1** Liveness e readiness via Actuator. A readiness depende do banco.
 - **R9.2** Um `traceId` é aceito do header `X-Correlation-Id` ou gerado. Ele vai para o MDC e para a resposta, é persistido com a solicitação e propagado na chamada ao provedor.
-- **R9.3** Métricas Micrometer/Prometheus: latência e resultado das chamadas ao provedor e transições por status.
+- **R9.3** Métricas Micrometer/Prometheus: latência e resultado das chamadas ao provedor, transições por status e quantidade atual de solicitações em `PENDING` e `PROCESSING`.
 - **R9.4** Logs estruturados em JSON quando a aplicação roda em container. Nenhum token ou credencial aparece nos logs.
 
 ## R10 — Build, execução e entrega [O]

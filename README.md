@@ -3,7 +3,7 @@
 Serviço de ativação de produtos de clientes. Ele registra solicitações, permite consultar o status e realiza a ativação por meio de um provedor externo.
 
 **Stack:** Java 21 · Spring Boot 3.5 (Spring MVC, Spring Data JPA/Hibernate, Spring Security) · PostgreSQL 16 · Flyway · Maven · Docker.
-**Testes:** 162 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
+**Testes:** 164 testes com JUnit 5, Mockito, AssertJ, MockMvc, Testcontainers, WireMock, Awaitility e ArchUnit. A cobertura é de 100% das linhas e dos ramos, exigida pelo build.
 
 | Documento | Conteúdo |
 |---|---|
@@ -287,7 +287,7 @@ As transições são feitas por métodos do domínio (`startProcessing`, `comple
 |---|---|---|---|
 | `2xx` | `COMPLETED` | — | Ativação confirmada |
 | `400` (e demais `4xx`, exceto `401`/`403`) | `FAILED` | Não | O pedido em si foi rejeitado; repetir não muda o resultado |
-| `401` / `403` | `PENDING` | Sim, a cada 1 min, **sem gastar tentativa** | A credencial recusada é a **nossa**: o problema é de configuração, não do pedido. Marcar `FAILED` perderia todas as solicitações do período; elas aguardam a correção e são concluídas depois dela. Cada recusa gera log `ERROR` e a métrica `activation.provider.calls{outcome=credentials_rejected}`, que deve ter alerta |
+| `401` / `403` | `PENDING` | Sim, a cada 1 min, **sem gastar tentativa** | A credencial recusada é a **nossa**: o problema é de configuração, não do pedido. Marcar `FAILED` perderia todas as solicitações do período; elas aguardam a correção e são concluídas depois dela. Cada recusa gera log `ERROR` e a métrica `activation.provider.calls{outcome=credentials_rejected}`, que deve ter alerta; a fila parada aparece em `activation.requests.active{status=PENDING}` |
 | `500` (e `408`, demais `5xx`) | `PENDING` | Sim, com backoff exponencial e jitter | Falha provavelmente passageira |
 | Timeout / erro de conexão | `PENDING` | Sim, com backoff | O resultado é desconhecido. É seguro repetir porque a `Idempotency-Key` impede a ativação duplicada |
 | `429` / `503` com `Retry-After` | `PENDING` | Sim, no momento indicado pelo provedor (limitado ao teto de 5 min do backoff) | O provedor diz quando voltar |
@@ -338,6 +338,7 @@ Um único `@RestControllerAdvice` converte tudo para ProblemDetail, inclusive os
 - **Métricas:**
   - `activation.provider.calls`: latência e taxa de erro do provedor, por resultado;
   - `activation.requests.transitions`: transições por status resultante;
+  - `activation.requests.active`: quantas solicitações estão agora em `PENDING` e em `PROCESSING` (tamanho da fila), contadas a cada coleta pelos índices parciais;
   - histogramas de `http.server.requests` e `http.client.requests`.
 - **Correlação:** o `X-Correlation-Id` é aceito (validado contra *log injection*) ou gerado, vai para o MDC como `traceId`, volta no header da resposta e nos erros, fica **persistido com a solicitação** e é restaurado pelo worker e enviado ao provedor. Dá para seguir uma ativação do `POST` até a chamada externa por um único identificador.
 - **Logs em JSON** (formato ECS) no profile `docker`. Nenhum token ou credencial é registrado.
@@ -428,7 +429,7 @@ Como eu executaria o serviço:
 - **Observabilidade:**
   - Prometheus + Grafana com dashboards de latência da API e do provedor, status das solicitações e pool de conexões;
   - logs JSON centralizados (ELK/Loki ou Azure Monitor);
-  - alertas para p99, taxa de `FAILED` e solicitações presas em `PROCESSING`.
+  - alertas para p99, taxa de `FAILED`, recusas de credencial (`outcome=credentials_rejected`), fila `PENDING` crescendo e `PROCESSING` que não esvazia (`activation.requests.active`).
 - **Escala do worker:** a propriedade `activation.processing.enabled` permite separar instâncias só de API e instâncias só de processamento, se as cargas crescerem de forma diferente.
 
 ---
@@ -494,7 +495,7 @@ O maior risco de desenvolver com IA é gerar código antes de decidir *o que* co
 1. **Análise:** leitura do enunciado e dos requisitos da vaga; separação entre obrigatórios e diferenciais; definição do que implementar e do que apenas descrever no README.
 2. **Especificação** ([`docs/spec`](docs/spec) e [`docs/adr`](docs/adr)): requisitos R1–R10 com critérios de aceite numerados, design e plano de tarefas. Para cada decisão estrutural, as alternativas foram comparadas antes da escolha (ex.: processamento síncrono, `@Async` ou tabela como fila; `UNIQUE` com tratamento da violação, `ON CONFLICT` ou lock; segurança descrita ou implementada; Spring Boot 3.5 ou 4.x). A spec foi aprovada antes de qualquer linha de código.
 3. **Implementação incremental:** cinco fases (fundação, domínio e API, integração, segurança, operação). Cada tarefa virou um ou mais commits pequenos que citam a tarefa do plano (ex.: `T3.3`); o [`tasks.md`](docs/spec/tasks.md) liga cada tarefa aos requisitos que ela atende. Cada fase terminou num **checkpoint de revisão**.
-4. **Verificação:** testes automatizados como critério de pronto (162 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
+4. **Verificação:** testes automatizados como critério de pronto (164 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
 
 ### Divisão de papéis
 

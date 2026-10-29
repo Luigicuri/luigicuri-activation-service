@@ -49,3 +49,4 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 ## Revisão crítica pós-implementação
 - [x] T6.1 Provedor recusando a credencial do serviço (401/403): adiar sem gastar tentativa, em vez de `FAILED` + testes — R5.3
 - [x] T6.2 `scheduleRetry` valida a entrada antes de alterar o estado (mesmo padrão da correção em `fail`) — R6.2
+- [x] T6.3 Gauge `activation.requests.active` com o tamanho atual da fila por status, base dos alertas de fila parada + testes — R9.3

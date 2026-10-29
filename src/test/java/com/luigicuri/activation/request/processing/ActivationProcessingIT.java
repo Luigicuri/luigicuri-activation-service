@@ -30,6 +30,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import io.micrometer.core.instrument.MeterRegistry;
+
 import com.github.tomakehurst.wiremock.junit5.WireMockExtension;
 import com.github.tomakehurst.wiremock.matching.RequestPatternBuilder;
 import com.luigicuri.activation.provider.ProviderResult;
@@ -74,6 +76,9 @@ class ActivationProcessingIT {
 
     @Autowired
     TransactionTemplate transactionTemplate;
+
+    @Autowired
+    MeterRegistry meterRegistry;
 
     @BeforeEach
     void cleanDatabase() {
@@ -296,6 +301,20 @@ class ActivationProcessingIT {
     }
 
     @Test
+    @DisplayName("R9.3 queue gauge reports PENDING and PROCESSING counts from the database")
+    void queueGaugeFollowsTheTable() {
+        pendingRequest("EXT-GAUGE-1");
+        pendingRequest("EXT-GAUGE-2");
+        assertThat(activeGauge("PENDING")).isEqualTo(2);
+        assertThat(activeGauge("PROCESSING")).isZero();
+
+        processingService.claimDue();
+
+        assertThat(activeGauge("PENDING")).isZero();
+        assertThat(activeGauge("PROCESSING")).isEqualTo(2);
+    }
+
+    @Test
     @DisplayName("requests not yet due are left alone")
     void requestsNotDueAreNotClaimed() {
         pendingRequest("EXT-LATER");
@@ -316,6 +335,10 @@ class ActivationProcessingIT {
     private static RequestPatternBuilder callsFor(ActivationRequest request) {
         return postRequestedFor(urlEqualTo(ACTIVATE))
                 .withHeader("Idempotency-Key", equalTo(request.getId().toString()));
+    }
+
+    private double activeGauge(String status) {
+        return meterRegistry.get(ActivationQueueMetrics.NAME).tag("status", status).gauge().value();
     }
 
     private ActivationRequest reload(ActivationRequest request) {
