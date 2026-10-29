@@ -445,4 +445,4 @@ As revisões em checkpoint e contra o enunciado pegaram problemas que uma geraç
 - um ciclo de dependência entre pacotes, detectado pelo ArchUnit;
 - a justificativa dos índices, pedida no README e registrada só no design.
 
-Cada decisão está registrada com contexto, alternativas e consequências, e eu posso explicar e defender qualquer uma delas.
+As decisões foram registradas com contexto, alternativas e consequências.
