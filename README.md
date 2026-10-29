@@ -33,10 +33,10 @@ git clone https://github.com/Luigicuri/luigicuri-activation-service.git
 cd luigicuri-activation-service
 
 ./mvnw verify               # testes unitários e de integração (PostgreSQL real via Testcontainers)
-docker compose up --build   # aplicação + PostgreSQL + provedor simulado + servidor OAuth2 simulado
+docker compose up --build   # aplicação, PostgreSQL, provedor e servidor OAuth2 simulados, e Jaeger
 ```
 
-Com a stack no ar, o jeito mais simples de usar a API é pelo **Swagger UI**, em http://localhost:18080/swagger-ui.html: clique em **Authorize** (as credenciais de demonstração já vêm preenchidas), marque os escopos e execute as operações. Também há uma [coleção do Postman](docs/postman/activation-service.postman_collection.json) com os cenários prontos.
+Com a stack no ar, o jeito mais simples de usar a API é pelo **Swagger UI**, em http://localhost:18080/swagger-ui.html: clique em **Authorize** (as credenciais de demonstração já vêm preenchidas), marque os escopos e execute as operações. Também há uma [coleção do Postman](docs/postman/activation-service.postman_collection.json) com os cenários prontos. Os traces de cada solicitação aparecem no **Jaeger**, em http://localhost:18686 (serviço `activation-service`).
 
 Pelo terminal:
 
@@ -54,7 +54,7 @@ curl -s localhost:18080/api/v1/requests/<id> -H "Authorization: Bearer $TOKEN"
 
 O provedor simulado responde conforme o `productCode`: `INVALID-PRODUCT` é recusado (400), `UNAVAILABLE-PRODUCT` fica indisponível (503 com `Retry-After`) e `SLOW-PRODUCT` passa do timeout. Qualquer outro é ativado.
 
-> As portas ficam na faixa 18xxx porque, no Windows, a faixa 8069–8268 costuma estar reservada pelo Hyper-V. Dá para trocá-las com `APP_PORT`, `MANAGEMENT_PORT`, `PROVIDER_PORT` e `AUTH_PORT`.
+> As portas ficam na faixa 18xxx porque, no Windows, a faixa 8069–8268 costuma estar reservada pelo Hyper-V. Dá para trocá-las com `APP_PORT`, `MANAGEMENT_PORT`, `PROVIDER_PORT`, `AUTH_PORT` e `JAEGER_PORT`.
 
 ---
 
@@ -66,7 +66,9 @@ O provedor simulado responde conforme o `productCode`: `INVALID-PRODUCT` é recu
 | `GET` | `/api/v1/requests/{id}` | `activation:read` | `200` · `404` |
 | `GET` | `/api/v1/requests?status=&customerId=&page=&size=` | `activation:read` | `200` paginado · `400` |
 
-Qualquer rota pode responder `401`, `403` ou `503` (banco indisponível). Os erros seguem o RFC 9457 (`application/problem+json`) e trazem um `traceId`, o mesmo que aparece nos logs.
+Os três campos são obrigatórios, com 1 a 64 caracteres: letras, números, `.`, `_` ou `-`. Datas em UTC (ISO-8601). Qualquer rota pode responder `401`, `403`, `429` (limite de chamadas) ou `503` (banco indisponível).
+
+Os erros seguem o RFC 9457 (`application/problem+json`) e trazem o `traceId`, que leva ao trace no Jaeger e aos logs, e o `correlationId`, que o sistema consumidor pode enviar no header `X-Correlation-Id`.
 
 O `POST` só grava a solicitação como `PENDING` e responde na hora. Um worker agendado pega as pendentes, chama o provedor e grava o resultado:
 
@@ -122,7 +124,9 @@ Escolhi o processamento **assíncrono**, usando a própria tabela como fila. Ass
 | `429` / `503` | `PENDING` | Sim, no momento indicado pelo `Retry-After` |
 | 5 tentativas esgotadas | `FAILED` | Não, e o motivo fica em `failureReason` |
 
-Depois de um timeout, o provedor pode ter ativado mesmo sem responder. Por isso toda chamada envia `Idempotency-Key` igual ao `id` da solicitação: o retry repete a mesma chave e não gera ativação duplicada. Os timeouts são explícitos (2 s para conectar e 5 s para ler). Mais em [ADR-0001](docs/adr/0001-async-processing-with-table-as-queue.md) e [ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md).
+Depois de um timeout, o provedor pode ter ativado mesmo sem responder. Por isso toda chamada envia `Idempotency-Key` igual ao `id` da solicitação: o retry repete a mesma chave e não gera ativação duplicada. Os timeouts são explícitos (2 s para conectar e 5 s para ler).
+
+Um **circuit breaker** (Resilience4j) protege o provedor: se metade das últimas 10 chamadas falhar, o worker para de chamá-lo por 30 s e depois testa com uma chamada só. Enquanto o circuito está aberto, nenhuma solicitação é retirada da fila, então ninguém gasta tentativa durante uma queda. Contam como falha só os problemas do provedor (5xx, timeout, credencial recusada); um `400` é uma resposta saudável sobre um pedido ruim. Mais em [ADR-0001](docs/adr/0001-async-processing-with-table-as-queue.md) e [ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md).
 
 ### Estados
 
@@ -133,7 +137,7 @@ Depois de um timeout, o provedor pode ter ativado mesmo sem responder. Por isso 
 - OAuth 2.0 **client credentials**, o fluxo pensado para comunicação entre sistemas. O serviço valida o JWT: assinatura (chaves via JWKS), emissor, expiração e audiência.
 - Escopos `activation:write` para criar e `activation:read` para consultar.
 - Cada sistema só enxerga as solicitações que criou. A de outro sistema responde `404`, e não `403`, para não confirmar que o registro existe (OWASP API1, BOLA).
-- O corpo da requisição é limitado a 16 KB. O rate limiting fica no API Gateway.
+- O corpo da requisição é limitado a 16 KB, e cada sistema consumidor pode fazer até 50 chamadas por segundo (configurável). Acima disso, a resposta é `429` com `Retry-After`. O contador fica na memória de cada instância; o limite global continua sendo papel do API Gateway.
 - A chave do provedor vem de variável de ambiente, alimentada por um cofre de segredos em produção, onde também é feita a rotação. Ela nunca aparece em log.
 
 Mais em [ADR-0004](docs/adr/0004-oauth2-resource-server-with-client-isolation.md).
@@ -143,7 +147,7 @@ Mais em [ADR-0004](docs/adr/0004-oauth2-resource-server-with-client-isolation.md
 - **Pacote por funcionalidade**, com camadas leves dentro dele, sem arquitetura hexagonal formal: o enunciado pede para não exagerar. As regras de dependência são verificadas com ArchUnit.
 - **PostgreSQL também nos testes**, via Testcontainers. Constraint única, `SKIP LOCKED` e fuso horário se comportam diferente no H2.
 - **Índices da listagem** começam por `client_id`, porque toda consulta é filtrada pelo dono, e terminam em `created_at DESC`, que é a ordenação: `(client_id, created_at)`, `(client_id, status, created_at)` e `(client_id, customer_id, created_at)`. A fila do worker usa índices parciais (`WHERE status = 'PENDING'`), que ficam pequenos mesmo com a tabela crescendo. A justificativa completa está no [design](docs/spec/design.md).
-- **Observabilidade:** Actuator numa porta separada (liveness e readiness), métricas no Prometheus (latência e resultado das chamadas ao provedor, transições e tamanho da fila), logs em JSON e um `traceId` que acompanha a solicitação do `POST` até a chamada ao provedor.
+- **Observabilidade:** Actuator numa porta separada (liveness e readiness), métricas no Prometheus (latência e resultado das chamadas ao provedor, transições e tamanho da fila) e logs em JSON. O tracing usa OpenTelemetry e é exportado para o Jaeger. Como o processamento é assíncrono, a solicitação guarda o `traceparent` de quem a criou, e o worker continua esse trace: o `POST`, o processamento e a chamada ao provedor aparecem como um único trace, e todos os logs do caminho trazem o mesmo `traceId`.
 
 ---
 
@@ -152,8 +156,8 @@ Mais em [ADR-0004](docs/adr/0004-oauth2-resource-server-with-client-isolation.md
 `./mvnw verify` roda tudo. A maior parte da confiança vem dos testes de integração, que usam o banco real e um provedor simulado com WireMock:
 
 - **Domínio e regras**, sem Spring: transições de estado, política de retry, classificação das respostas do provedor.
-- **API**, com `@WebMvcTest`: validação, formato dos erros, 401/403.
-- **Integração**, com PostgreSQL via Testcontainers e WireMock: duplicidade concorrente, cada cenário do provedor (sucesso, 400, 500, timeout, 429, credencial recusada), duas instâncias processando ao mesmo tempo, recuperação de uma instância que caiu e validação real de JWT.
+- **API**, com `@WebMvcTest`: validação, formato dos erros, 401/403, limite de chamadas.
+- **Integração**, com PostgreSQL via Testcontainers e WireMock: duplicidade concorrente, cada cenário do provedor (sucesso, 400, 500, timeout, 429, credencial recusada), duas instâncias processando ao mesmo tempo, recuperação de uma instância que caiu, circuit breaker abrindo numa queda do provedor, o trace atravessando a etapa assíncrona e validação real de JWT.
 - **Arquitetura**, com ArchUnit: dependências entre pacotes.
 
 O build exige 100% de cobertura de linhas e ramos. Não pelo número: é a forma de garantir que todo comportamento novo chegue com teste.
@@ -172,7 +176,7 @@ O build exige 100% de cobertura de linhas e ramos. Não pelo número: é a forma
 
 **Hipótese de causa comum.** Se a chamada ao provedor fosse síncrona e dentro de uma transação, cada requisição seguraria uma conexão do banco durante toda a chamada externa. Com o provedor 7 vezes mais lento, o pool esgota e consultas rápidas passam a esperar na fila: parecem levar 1,2 s, mas o banco continua executando em 50 ms. Threads esperando não gastam CPU, o que explica os 45%. Eu confirmaria com o pool saturado nas métricas, com a diferença entre o tempo do banco e o da aplicação e com o thread dump.
 
-**Melhorias.** As estruturais já estão neste projeto: chamada fora de transação, processamento assíncrono, `open-in-view` desligado e timeouts explícitos. Como táticas, entram circuit breaker, pool separado para chamadas externas e índices onde o banco confirmar lentidão real.
+**Melhorias.** As estruturais já estão neste projeto: chamada fora de transação, processamento assíncrono, `open-in-view` desligado, timeouts explícitos e circuit breaker. Como táticas, entram pool separado para chamadas externas e índices onde o banco confirmar lentidão real.
 
 **Como validar.** Comparo p95/p99 e as métricas do pool antes e depois, publico primeiro para uma fração do tráfego (*canary*) e, antes disso, reproduzo o cenário num teste de carga com o provedor simulado lento.
 
@@ -184,7 +188,8 @@ O build exige 100% de cobertura de linhas e ramos. Não pelo número: é a forma
 - **Execução:** num orquestrador (AKS, EKS ou Container Apps), com duas ou mais réplicas, probes na porta de gestão e desligamento gracioso. Várias instâncias não quebram as regras: a duplicidade é garantida pelo banco e o `SKIP LOCKED` divide o trabalho entre elas.
 - **Configuração e segredos:** variáveis de ambiente para configuração; senhas e chaves vêm do cofre do provedor cloud (Key Vault ou Secrets Manager).
 - **Borda:** um API Gateway cuida de TLS e rate limiting e repassa os headers `X-Forwarded-*`, que a aplicação usa para montar o `Location` com o endereço público (`server.forward-headers-strategy=framework`). A porta de gestão não é exposta publicamente.
-- **Alertas:** p99 da API, taxa de `FAILED`, credencial recusada pelo provedor e fila `PENDING` crescendo.
+- **Alertas:** p99 da API, taxa de `FAILED`, credencial recusada pelo provedor, circuit breaker aberto e fila `PENDING` crescendo.
+- **Tracing:** o mesmo OpenTelemetry, apontando `MANAGEMENT_OTLP_TRACING_ENDPOINT` para o coletor da empresa, com amostragem menor que 100% (`TRACING_SAMPLING_PROBABILITY`).
 - **Avisar outros serviços** de que uma ativação terminou: eu usaria um *transactional outbox*, que grava o evento na mesma transação do resultado e o publica num tópico Kafka.
 
 ---
@@ -192,8 +197,6 @@ O build exige 100% de cobertura de linhas e ramos. Não pelo número: é a forma
 ## Pontos pendentes
 
 - **Evento de conclusão** (outbox + Kafka), como descrito acima.
-- **Circuit breaker:** hoje, com o provedor fora do ar, o backoff persistido reduz a pressão sobre ele, e com a credencial recusada cada solicitação é adiada sem gastar tentativa. Um circuit breaker pausaria o worker inteiro.
-- **Tracing distribuído** com OpenTelemetry. Hoje o `traceId` é propagado, mas sem *spans*.
 - **Resultado incerto:** depois de várias falhas por timeout, a solicitação vira `FAILED`, mas o provedor pode ter ativado. Com um endpoint de consulta no provedor, eu confirmaria pela `Idempotency-Key` antes de declarar a falha.
 - **Vazão do worker:** cada instância chama o provedor uma solicitação por vez (cerca de 20 por minuto com o provedor a 3 s). Para mais vazão: mais instâncias ou chamadas paralelas limitadas dentro do lote.
 

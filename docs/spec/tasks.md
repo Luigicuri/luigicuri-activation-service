@@ -52,3 +52,7 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T6.3 Gauge `activation.requests.active` com o tamanho atual da fila por status, base dos alertas de fila parada + testes — R9.3
 - [x] T6.4 Log da criação sob o `traceId` do chamador e ordem estável dos erros de validação (campo, mensagem) + testes — R9.2, R7.2
 - [x] T6.5 Banco indisponível responde `503` com `Retry-After` em ~3 s (timeout do pool reduzido) + testes — R7.5
+- [x] T6.6 Regras de validação de volta ao README — R1
+- [x] T6.7 Tracing distribuído com OpenTelemetry e Jaeger; o trace atravessa a etapa assíncrona via `traceparent` persistido; `correlationId` separado do `traceId` + testes — R9.2
+- [x] T6.8 Circuit breaker (Resilience4j) em volta do provedor, sem gastar tentativas com o circuito aberto + testes — R5.9
+- [x] T6.9 Limite de chamadas por sistema consumidor (Resilience4j RateLimiter), `429` com `Retry-After` + testes — R8.5

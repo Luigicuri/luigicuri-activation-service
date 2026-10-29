@@ -21,11 +21,12 @@ O provedor pode responder com sucesso, com erro definitivo (o pedido é inválid
 - **Backoff exponencial com full jitter:** `random(0, min(maxDelay, initial × multiplier^(attempt-1)))`. O jitter evita que muitas solicitações que falharam juntas tentem de novo todas no mesmo instante.
 - **`Idempotency-Key = id` da solicitação** é enviada em toda chamada.
 - **Credencial recusada (401/403):** a solicitação volta para `PENDING` e devolve a tentativa (`postpone`). Voltar ao número de tentativa anterior é seguro para a detecção de resultado atrasado, porque a chamada que acabou de responder era a única com esse número. Cada recusa gera log `ERROR` e métrica própria para alerta.
+- **Circuit breaker (Resilience4j):** conta como falha só o que é problema do provedor (5xx, timeout, credencial recusada); um `4xx` de negócio é resposta saudável. Abre com 50% de falhas nas últimas 10 chamadas (mínimo de 5) e fica aberto por 30 s. Aberto, o worker não retira nada da fila; se abrir no meio de um lote, o restante volta para `PENDING` sem chamada e sem gastar tentativa.
 - **Reconciliação:** `PROCESSING` com lease vencido é tratado como falha temporária: conta como tentativa e volta para `PENDING` com backoff, ou vira `FAILED` se o limite de tentativas foi atingido.
 
 ## Alternativas consideradas
 - **Retry em memória (Spring Retry / Resilience4j Retry) dentro da mesma execução:** prende a thread do worker durante o backoff e perde o estado se a aplicação cair. O retry persistido no banco sobrevive a reinícios.
-- **Circuit breaker (Resilience4j):** útil quando o provedor está fora por muito tempo, para parar de gastar tentativas. Fica fora do escopo e é descrito no README. O backoff persistido já reduz a pressão sobre o provedor.
+- **Só backoff persistido, sem circuit breaker:** reduz a pressão, mas cada solicitação continua tentando por conta própria e gastando tentativas durante uma queda longa. O circuit breaker pausa o trabalho inteiro e preserva as tentativas.
 
 ## Consequências
 - (+) O comportamento de cada retorno é explícito e testável de forma unitária.

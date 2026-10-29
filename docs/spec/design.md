@@ -54,7 +54,8 @@ ActivationRequest (entidade JPA)
   nextAttemptAt    Instant    quando volta a ser elegível (status PENDING)
   processingStartedAt Instant início do lease (status PROCESSING), R5.7
   failureReason    String     sanitizado, só quando FAILED
-  correlationId    String     traceId da requisição de criação, R9.2
+  correlationId    String     correlationId da requisição de criação, R9.2
+  traceParent      String     W3C traceparent da requisição de criação; o worker continua esse trace, R9.2
   version          long       @Version, R6.4
   createdAt, updatedAt Instant UTC
 ```
@@ -128,6 +129,7 @@ A tabela `activation_request` funciona como a própria fila. Não existe tabela 
 
 ```
 ActivationWorker (@Scheduled, fixedDelay configurável, padrão 1s)
+  circuit breaker aberto? → pula o ciclo (nada é retirado da fila)
   ┌ TX 1 (curta) ────────────────────────────────────────────────┐
   │ SELECT ... WHERE status='PENDING' AND next_attempt_at <= now() │
   │ ORDER BY next_attempt_at LIMIT :batchSize                     │
@@ -143,6 +145,7 @@ ActivationWorker (@Scheduled, fixedDelay configurável, padrão 1s)
   │   TransientFailure  → attempts < max ? scheduleRetry(at)      │
   │                                       : fail("max attempts")  │
   │   CredentialsRejected → postpone(+1min), sem gastar tentativa │
+  │ circuito aberto no meio do lote → postpone(), sem chamada     │
   └─ commit (@Version protege contra escrita concorrente) ───────┘
 
 Reconciliação (ActivationWorker.releaseExpiredClaims, @Scheduled, padrão 30s)
@@ -201,12 +204,13 @@ A classificação HTTP → `ProviderResult` fica isolada no `provider/` e é tes
 | Não encontrado (inclusive de outro dono) | 404 | `not-found` |
 | Duplicidade com conteúdo diferente / de outro dono | 409 | `duplicate-request` |
 | Corpo acima de 16 KB | 413 | `payload-too-large` |
+| Limite de chamadas do cliente excedido | 429 + `Retry-After` | `too-many-requests` |
 | Sem token / token inválido | 401 | `unauthorized` (via `AuthenticationEntryPoint`) |
 | Escopo insuficiente | 403 | `forbidden` (via `AccessDeniedHandler`) |
 | Banco indisponível (`CannotCreateTransactionException`, `DataAccessResourceFailureException`) | 503 + `Retry-After: 5` | `service-unavailable`; `hikari.connection-timeout` = 3 s |
 | Qualquer outra exceção | 500 | `internal-error`, mensagem genérica, stack trace só no log |
 
-O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é devolvido no header `X-Correlation-Id`.
+Todo problema traz o `correlationId` (do filtro de correlação, também devolvido no header `X-Correlation-Id`) e, quando a requisição está sendo rastreada, o `traceId` do OpenTelemetry.
 
 ## 8. Segurança (R8, ADR-0004)
 
@@ -214,6 +218,7 @@ O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é dev
 - **Validação:** `issuer-uri` → descoberta do JWKS (as chaves são buscadas e guardadas em cache, o que suporta rotação). Valida assinatura, `iss`, `exp`/`nbf` e `aud = activation-service`, esta última via a propriedade `spring.security.oauth2.resourceserver.jwt.audiences`, sem validador customizado. A descoberta é preguiçosa: a aplicação sobe mesmo que o servidor de autorização ainda não esteja acessível.
 - **Firewall:** requisições rejeitadas pelo `StrictHttpFirewall` (caracteres de controle em headers, URLs malformadas) respondem `400` em ProblemDetail, e não `500`.
 - **Tamanho do corpo:** um filtro recusa `Content-Length` acima de 16 KB antes da leitura. Corpos *chunked* são cortados durante a leitura. Os dois casos respondem `413`.
+- **Limite de chamadas:** `ClientRateLimitFilter`, depois da autorização (chamadas recusadas não contam), com um `RateLimiter` do Resilience4j por `client_id` (`activation.rate-limit`, padrão 50 por segundo). Excesso → `429` com `Retry-After`. O contador é por instância; o limite global fica no API Gateway.
 - **Autorização:** `POST` exige `SCOPE_activation:write`. `GET` exige `SCOPE_activation:read`.
 - **Dono:** claim `client_id` (RFC 9068), com fallback para `azp` e depois `sub`. Gravado em `client_id` na criação e aplicado como filtro em toda consulta (`findByIdAndClientId`).
 - **Ambiente local:** o `docker-compose` inclui `mock-oauth2-server` (navikt), que emite tokens reais via client credentials. Nos testes, o `jwt()` do `spring-security-test` dispensa servidor.
@@ -226,7 +231,8 @@ O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é dev
   - `activation.provider.calls` (timer, tag `outcome=success|permanent_failure|transient_failure|credentials_rejected`)
   - `activation.requests.transitions` (counter, tag `to=<status>`)
   - `activation.requests.active` (gauge, tag `status=PENDING|PROCESSING`): `count` a cada coleta, barato pelos índices parciais; base dos alertas de fila parada
-- `CorrelationIdFilter`: lê ou gera o `X-Correlation-Id` e o coloca no MDC como `traceId`. O worker restaura o MDC a partir de `correlation_id` antes de chamar o provedor.
+- `CorrelationIdFilter`: lê ou gera o `X-Correlation-Id` e o coloca no MDC como `correlationId`. O worker restaura o MDC a partir de `correlation_id` antes de chamar o provedor.
+- Tracing: Micrometer Tracing sobre OpenTelemetry, exportado via OTLP (Jaeger no compose); `traceId` e `spanId` vão para o MDC. Na criação, `TraceContexts` guarda o `traceparent` W3C com a solicitação; o worker abre o span `activation process` como continuação dele, e o `RestClient` propaga o contexto ao provedor. A observação de cada ciclo do agendador é descartada para não gerar um trace vazio por segundo.
 - Logs: texto em desenvolvimento e JSON (`logging.structured.format.console=ecs`) no profile `docker`.
 
 ## 10. Estratégia de testes

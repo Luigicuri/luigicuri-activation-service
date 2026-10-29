@@ -71,6 +71,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 - **R5.6** Backoff exponencial com jitter, teto configurável e número máximo de tentativas configurável [D].
 - **R5.7** Solicitações presas em `PROCESSING` além de um tempo limite (a aplicação caiu durante a chamada) voltam a ser elegíveis para nova tentativa (reconciliação) [D].
 - **R5.8** Várias instâncias da aplicação podem processar ao mesmo tempo sem enviar a mesma solicitação duas vezes em paralelo [D].
+- **R5.9** Um circuit breaker protege o provedor: com a maioria das chamadas recentes falhando (5xx, timeout, credencial recusada), o worker para de chamá-lo por um tempo e depois testa com uma chamada. Com o circuito aberto, nenhuma solicitação gasta tentativa [D].
 
 ## R6 — Máquina de estados [D]
 
@@ -81,7 +82,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 
 ## R7 — Tratamento de erros [O]
 
-- **R7.1** Todas as respostas de erro usam `application/problem+json` (RFC 9457) com `type`, `title`, `status`, `detail`, `instance` e `traceId` [D].
+- **R7.1** Todas as respostas de erro usam `application/problem+json` (RFC 9457) com `type`, `title`, `status`, `detail`, `instance`, `correlationId` e, quando há tracing, `traceId` [D].
 - **R7.2** Erros de validação incluem `errors: [{field, message}]`, em ordem estável (por campo e mensagem).
 - **R7.3** Erro inesperado → `500` com mensagem genérica. Nenhum stack trace, nome de classe ou SQL é exposto. O detalhe vai para o log com o mesmo `traceId`.
 - **R7.4** Erros de integração não chegam ao consumidor da API como erro HTTP, já que o processamento é assíncrono. Eles ficam refletidos no status (`FAILED` com `failureReason`) e nos logs e métricas.
@@ -93,13 +94,13 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 - **R8.2** Sem token ou com token inválido → `401`.
 - **R8.3** Escopo `activation:write` para criar. Escopo `activation:read` para consultar e listar. Escopo insuficiente → `403`.
 - **R8.4** Cada solicitação pertence ao sistema que a criou (claim `client_id`/`azp`). Um sistema não consulta nem lista solicitações de outro: retorna `404`, não `403`, para não revelar a existência do registro (OWASP API1:2023, BOLA).
-- **R8.5** Corpo da requisição acima de 16 KB → `413`.
+- **R8.5** Corpo da requisição acima de 16 KB → `413`. Cada sistema consumidor tem um limite de chamadas por período; acima dele → `429` com `Retry-After`.
 - **R8.6** Actuator `health` (liveness/readiness) é público. Os demais endpoints do Actuator ficam em porta de gestão separada e não são expostos publicamente.
 
 ## R9 — Observabilidade [D]
 
 - **R9.1** Liveness e readiness via Actuator. A readiness depende do banco.
-- **R9.2** Um `traceId` é aceito do header `X-Correlation-Id` ou gerado. Ele vai para o MDC e para a resposta, é persistido com a solicitação e propagado na chamada ao provedor.
+- **R9.2** Um `correlationId` é aceito do header `X-Correlation-Id` ou gerado. Ele vai para o MDC e para a resposta, é persistido com a solicitação e propagado na chamada ao provedor. O tracing distribuído (OpenTelemetry) acompanha a solicitação do `POST` até a chamada ao provedor num único trace, atravessando a etapa assíncrona.
 - **R9.3** Métricas Micrometer/Prometheus: latência e resultado das chamadas ao provedor, transições por status e quantidade atual de solicitações em `PENDING` e `PROCESSING`.
 - **R9.4** Logs estruturados em JSON quando a aplicação roda em container. Nenhum token ou credencial aparece nos logs.
 
@@ -118,7 +119,5 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 ## Fora de escopo (descrito no README, não implementado)
 
 - Publicação de evento `ActivationCompleted` em broker (Kafka) via transactional outbox.
-- Circuit breaker (Resilience4j).
-- Rate limiting: responsabilidade do API Gateway.
-- Tracing distribuído com OpenTelemetry.
+- Limite global de chamadas entre instâncias: responsabilidade do API Gateway (o limite da aplicação é por instância).
 - Manifestos de Kubernetes e Terraform.
