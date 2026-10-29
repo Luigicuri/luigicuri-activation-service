@@ -12,6 +12,7 @@ Serviço de ativação de produtos de clientes. Ele registra solicitações, per
 | [docs/spec/tasks.md](docs/spec/tasks.md) | Plano de implementação, rastreável até os commits |
 | [docs/adr/](docs/adr) | Registros de decisão (ADR-0001 a 0004) |
 | [Manual do Desenvolvedor](docs/guias/Manual-do-Desenvolvedor-Activation-Service.pdf) | Visão técnica para avaliação: como rodar, mapa do desafio para a solução, arquitetura, decisões e testes |
+| [Guia de QA](docs/guias/Guia-QA-Activation-Service.pdf) | Estratégia de teste baseada em risco, 62 casos manuais priorizados, testes exploratórios e rastreabilidade com a automação |
 | [Guia de uso pelo Swagger](docs/guias/Guia-Swagger-Activation-Service.pdf) | Passo a passo para quem vai usar a API pelo navegador |
 | [Guia de uso pelo Postman](docs/guias/Guia-Postman-Activation-Service.pdf) | Passo a passo com a coleção Postman |
 
