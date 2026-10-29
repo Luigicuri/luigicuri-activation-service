@@ -70,6 +70,23 @@ Os três campos são obrigatórios, com 1 a 64 caracteres: letras, números, `.`
 
 Os erros seguem o RFC 9457 (`application/problem+json`) e trazem o `traceId`, que leva ao trace no Jaeger e aos logs, e o `correlationId`, que o sistema consumidor pode enviar no header `X-Correlation-Id`.
 
+Os componentes e quem fala com quem:
+
+```mermaid
+flowchart LR
+    C["Sistema consumidor"] -- "1. token" --> A["Servidor OAuth2<br/>emite JWT"]
+    C -- "2. POST / GET + JWT" --> API
+    subgraph S["Activation Service"]
+        API["API REST<br/>JWT, escopos, limite por cliente"]
+        W["Worker<br/>SKIP LOCKED, retry, circuit breaker"]
+    end
+    API -- "grava e lê" --> DB[("PostgreSQL<br/>a tabela é a fila")]
+    W -- "pega pendentes, grava resultado" --> DB
+    W -- "ativa com Idempotency-Key" --> P["Provedor externo"]
+    API -. "spans" .-> J["Jaeger"]
+    W -. "spans" .-> J
+```
+
 O `POST` só grava a solicitação como `PENDING` e responde na hora. Um worker agendado pega as pendentes, chama o provedor e grava o resultado:
 
 ```mermaid
