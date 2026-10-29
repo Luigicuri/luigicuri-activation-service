@@ -19,7 +19,7 @@ O provedor pode responder com sucesso, com erro definitivo (o pedido é inválid
 - **Falha temporária volta para `PENDING`** com `attempts++` e `nextAttemptAt`, em vez de continuar em `PROCESSING` com um contador. Assim, `PROCESSING` significa só "chamada em andamento agora", e um `PROCESSING` antigo é sempre anomalia (a instância caiu), tratada pela reconciliação.
 - **Backoff exponencial com full jitter:** `random(0, min(maxDelay, initial × multiplier^(attempt-1)))`. O jitter evita que muitas solicitações que falharam juntas tentem de novo todas no mesmo instante.
 - **`Idempotency-Key = id` da solicitação** é enviada em toda chamada.
-- **Reconciliação:** `PROCESSING` com lease vencido volta para `PENDING` e conta como tentativa.
+- **Reconciliação:** `PROCESSING` com lease vencido é tratado como falha temporária: conta como tentativa e volta para `PENDING` com backoff, ou vira `FAILED` se o limite de tentativas foi atingido.
 
 ## Alternativas consideradas
 - **Retry em memória (Spring Retry / Resilience4j Retry) dentro da mesma execução:** prende a thread do worker durante o backoff e perde o estado se a aplicação cair. O retry persistido no banco sobrevive a reinícios.

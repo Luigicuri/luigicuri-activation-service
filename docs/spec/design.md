@@ -143,9 +143,10 @@ ActivationWorker (@Scheduled, fixedDelay configurável, padrão 1s)
   │                                       : fail("max attempts")  │
   └─ commit (@Version protege contra escrita concorrente) ───────┘
 
-ReconciliationJob (@Scheduled, padrão 30s)
+Reconciliação (ActivationWorker.releaseExpiredClaims, @Scheduled, padrão 30s)
   PROCESSING com processing_started_at < now() - leaseTimeout (padrão 2min)
-  → scheduleRetry(now) (conta como tentativa)
+  → mesma regra de uma falha temporária (conta como tentativa):
+    attempts < max ? scheduleRetry(backoff) : fail("max attempts")
 ```
 
 - **Garantia de entrega (R5.1):** o registro é gravado como `PENDING` no commit do `POST`. Se a aplicação cair antes de chamar o provedor, o worker pega o registro no próximo ciclo. Se cair durante a chamada, a reconciliação devolve o registro para a fila. A entrega é *at-least-once*. A duplicidade no provedor é evitada pela `Idempotency-Key`.

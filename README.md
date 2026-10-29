@@ -82,7 +82,7 @@ sequenceDiagram
         P-->>W: 2xx / 4xx / 5xx / timeout
         W->>DB: TX 2: COMPLETED, FAILED ou PENDING + nextAttemptAt
     end
-    Note over W,DB: PROCESSING há mais de 2 min (instância caiu) → reconciliação devolve para PENDING
+    Note over W,DB: PROCESSING há mais de 2 min (instância caiu) → reconciliação devolve para a fila (ou FAILED, se esgotou as tentativas)
 
     C->>API: GET /api/v1/requests/{id}
     API->>DB: SELECT (só registros do próprio client_id)
@@ -205,9 +205,9 @@ Todas as rotas também podem responder `401` (sem token ou token inválido) e `4
 | Índice | Atende | Justificativa |
 |---|---|---|
 | `UNIQUE (external_id)` | Duplicidade | Garante a unicidade e também serve à releitura do registro existente no fluxo de retry |
-| `(client_id, created_at DESC)` | Listagem sem filtro | Toda listagem é filtrada pelo dono (isolamento entre clientes) e ordenada pela data; o índice resolve as duas coisas sem ordenação em memória |
+| `(client_id, created_at DESC)` | Listagem sem filtro | Toda listagem é filtrada pelo dono (isolamento entre clientes) e ordenada pela data; o índice entrega as linhas já na ordem. O `id`, usado só para desempatar registros do mesmo milissegundo, é resolvido pelo PostgreSQL com *incremental sort* sobre poucas linhas |
 | `(client_id, status, created_at DESC)` | Filtro por `status` | Igualdade em `client_id` e `status`, seguida da ordenação |
-| `(client_id, customer_id, created_at DESC)` | Filtro por `customerId` | Idem; com os dois filtros, este é o escolhido (`customerId` é mais seletivo) e o `status` é filtrado no resultado |
+| `(client_id, customer_id, created_at DESC)` | Filtro por `customerId` | Idem. Com os dois filtros, a expectativa é que o planejador escolha este, porque `customerId` costuma ser mais seletivo que `status`, e filtre o `status` no resultado. A escolha final é do planejador, conforme as estatísticas, e deve ser confirmada com `EXPLAIN` sobre dados reais |
 | `(next_attempt_at) WHERE status = 'PENDING'` | Fila do worker | Índice **parcial**: contém só a fila, que é pequena; os registros finalizados, que são a maioria, ficam de fora |
 | `(processing_started_at) WHERE status = 'PROCESSING'` | Reconciliação | Mesmo raciocínio: só os registros em andamento |
 
@@ -423,7 +423,7 @@ Como eu executaria o serviço:
   - desligamento gracioso, em que o Spring espera as requisições em andamento e o agendador espera a chamada em curso ao provedor.
 - **Configuração e segredos:** só por variáveis de ambiente (`DB_URL`, `PROVIDER_BASE_URL`, `JWT_ISSUER_URI` etc.). Os segredos (`DB_PASSWORD`, `PROVIDER_API_KEY`) vêm do cofre do provedor cloud, via CSI driver ou integração nativa, e nunca ficam no repositório nem na imagem.
 - **Banco:** PostgreSQL gerenciado (Azure Database for PostgreSQL / RDS), com backups e réplica. As migrações do Flyway rodam na subida; com muitas réplicas, eu as rodaria num *job* separado antes do deploy.
-- **Borda:** um API Gateway faz TLS, rate limiting por `client_id` e limites de tamanho. A porta de gestão `8081` não é exposta publicamente, só para o orquestrador e o Prometheus.
+- **Borda:** um API Gateway faz TLS, rate limiting por `client_id` e limites de tamanho. Atrás dele, a aplicação precisa de `server.forward-headers-strategy=framework` para que o header `Location` aponte para o host público, e não para o interno. A porta de gestão `8081` não é exposta publicamente, só para o orquestrador e o Prometheus.
 - **Observabilidade:**
   - Prometheus + Grafana com dashboards de latência da API e do provedor, status das solicitações e pool de conexões;
   - logs JSON centralizados (ELK/Loki ou Azure Monitor);
@@ -462,6 +462,10 @@ O que não foi implementado, e como eu faria:
 | URIs dos tipos de problema | `https://api.luigicuri.dev/problems/...` são identificadores estáveis, mas não apontam para páginas publicadas |
 | Resposta quando o banco cai | Hoje o `POST` espera até 30 s (tempo padrão do pool de conexões) e responde `500` genérico. Reduziria `spring.datasource.hikari.connection-timeout` para poucos segundos e mapearia a falta de conexão para `503` com `Retry-After`, mais útil para o cliente |
 | Contrato de idempotência com o provedor | A solução assume que o provedor respeita `Idempotency-Key`. Isso precisa estar acordado e testado com ele |
+| Provedor respondendo `401`/`403` | Hoje cai na regra "demais 4xx" e vira `FAILED` definitivo. Mas `401`/`403` indicam um problema da **nossa** credencial, não do pedido: uma chave expirada falharia todas as solicitações do período. Trataria esses códigos como falha do serviço: pausar o processamento (circuit breaker), alertar e não gastar tentativas |
+| `FAILED` depois de esgotar as tentativas por timeout | Depois de um timeout, o resultado no provedor é desconhecido: ele pode ter ativado. Hoje o status fica `FAILED`, com o motivo em `failureReason`. Com um endpoint de consulta no provedor, eu confirmaria o estado pela `Idempotency-Key` antes de declarar a falha, ou usaria um status próprio (por exemplo, `UNKNOWN`) para tratamento manual |
+| Vazão do worker | Cada instância chama o provedor uma solicitação por vez. Com o provedor a 3 s (cenário do item 10), são cerca de 20 ativações por minuto por instância. A latência da API não é afetada, mas a fila cresce. Escalaria com mais instâncias (o `SKIP LOCKED` já permite) ou com chamadas paralelas limitadas dentro do lote (por exemplo, virtual threads com semáforo), recalculando o lease |
+| Paginação por offset | Cada página executa também um `count(*)`, e páginas profundas ficam caras. Para volumes grandes, trocaria por paginação por cursor (`createdAt`, `id`), que os índices já suportam |
 
 ---
 
@@ -488,7 +492,7 @@ O maior risco de desenvolver com IA é gerar código antes de decidir *o que* co
 
 1. **Análise:** leitura do enunciado e dos requisitos da vaga; separação entre obrigatórios e diferenciais; definição do que implementar e do que apenas descrever no README.
 2. **Especificação** ([`docs/spec`](docs/spec) e [`docs/adr`](docs/adr)): requisitos R1–R10 com critérios de aceite numerados, design e plano de tarefas. Para cada decisão estrutural, as alternativas foram comparadas antes da escolha (ex.: processamento síncrono, `@Async` ou tabela como fila; `UNIQUE` com tratamento da violação, `ON CONFLICT` ou lock; segurança descrita ou implementada; Spring Boot 3.5 ou 4.x). A spec foi aprovada antes de qualquer linha de código.
-3. **Implementação incremental:** cinco fases (fundação, domínio e API, integração, segurança, operação). Cada tarefa virou um commit pequeno que cita os requisitos atendidos, e cada fase terminou num **checkpoint de revisão**.
+3. **Implementação incremental:** cinco fases (fundação, domínio e API, integração, segurança, operação). Cada tarefa virou um ou mais commits pequenos que citam a tarefa do plano (ex.: `T3.3`); o [`tasks.md`](docs/spec/tasks.md) liga cada tarefa aos requisitos que ela atende. Cada fase terminou num **checkpoint de revisão**.
 4. **Verificação:** testes automatizados como critério de pronto (154 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
 
 ### Divisão de papéis

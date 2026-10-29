@@ -1,6 +1,6 @@
 # Tarefas
 
-Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam os requisitos atendidos. Ao fim de cada fase há um checkpoint de revisão.
+Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam o id da tarefa (ex.: `T3.3`); a lista abaixo liga cada tarefa aos requisitos que ela atende. Ao fim de cada fase há um checkpoint de revisão.
 
 ## Fase 0 — Especificação
 - [x] T0.1 `requirements.md`, `design.md`, `tasks.md` e ADRs 0001–0004
