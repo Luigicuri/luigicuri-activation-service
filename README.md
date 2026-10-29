@@ -411,11 +411,38 @@ O que não foi implementado, e como eu faria:
 
 ## Uso de IA
 
-Usei o **Claude Code** (modelo Claude Opus 5.5, da Anthropic) como assistente durante todo o desafio, num fluxo de **Spec-Driven Development**:
+O projeto foi desenvolvido com o **Claude Code** (Claude Opus 5.5, da Anthropic) como ferramenta, dentro de um processo de **Spec-Driven Development (SDD)**. A IA aumentou a velocidade de execução; o processo é o que garantiu o controle sobre as decisões e a qualidade do resultado.
 
-1. **Especificação primeiro:** os requisitos, o design e os ADRs em [`docs/`](docs) foram redigidos com o assistente a partir do enunciado. As decisões (processamento assíncrono com a tabela como fila, semântica 200/409, falha temporária voltando a `PENDING`, implementar a segurança, Spring Boot 3.5) foram **discutidas, escolhidas e aprovadas por mim** antes de qualquer código.
-2. **Implementação guiada pela spec:** o código, os testes e a infraestrutura (Dockerfile, compose, CI) foram gerados pelo assistente, uma tarefa por vez, com commits que citam os requisitos atendidos.
-3. **Revisão em checkpoints:** ao fim de cada fase, revisei o resultado e pedi verificações adicionais. Por exemplo, uma revisão contra o enunciado encontrou e corrigiu a divergência de precisão nos timestamps entre o `POST` e o `GET`.
-4. **Verificação:** todo comportamento foi validado por testes automatizados e por execução real da stack com `docker compose`.
+### Por que Spec-Driven Development
 
-A IA acelerou a escrita. As escolhas técnicas, os trade-offs e a responsabilidade pelo resultado são meus, e posso explicar e defender cada uma delas na conversa técnica.
+O maior risco de desenvolver com IA é gerar código antes de decidir *o que* construir e *por quê*: o resultado funciona, mas ninguém escolheu de fato os trade-offs. No SDD a especificação vem antes do código e é a fonte da verdade. Cada decisão fica explícita, revisável antes da implementação e rastreável até o teste que a comprova.
+
+### Como o trabalho foi conduzido
+
+1. **Análise:** leitura do enunciado e dos requisitos da vaga; separação entre obrigatórios e diferenciais; definição do que implementar e do que apenas descrever no README.
+2. **Especificação** ([`docs/spec`](docs/spec) e [`docs/adr`](docs/adr)): requisitos R1–R10 com critérios de aceite numerados, design e plano de tarefas. Para cada decisão estrutural, as alternativas foram comparadas antes da escolha (ex.: processamento síncrono, `@Async` ou tabela como fila; `UNIQUE` com tratamento da violação, `ON CONFLICT` ou lock; segurança descrita ou implementada; Spring Boot 3.5 ou 4.x). A spec foi aprovada antes de qualquer linha de código.
+3. **Implementação incremental:** cinco fases (fundação, domínio e API, integração, segurança, operação). Cada tarefa virou um commit pequeno que cita os requisitos atendidos, e cada fase terminou num **checkpoint de revisão**.
+4. **Verificação:** testes automatizados como critério de pronto (154 testes, PostgreSQL real, gate de 100% de cobertura); execução real da stack com `docker compose`, pelo Swagger e pela coleção Postman (validada com Newman); revisões do resultado contra o enunciado.
+
+### Divisão de papéis
+
+| Responsabilidade | Desenvolvedor | IA (Claude Code) |
+|---|---|---|
+| Escopo e prioridades | Definiu | Propôs opções |
+| Decisões técnicas e trade-offs | Escolheu entre as alternativas e aprovou | Levantou alternativas, prós e contras |
+| Especificação e ADRs | Revisou e aprovou | Redigiu a partir das decisões |
+| Código, testes e infraestrutura | Revisou a cada checkpoint | Implementou, tarefa por tarefa |
+| Critérios de qualidade | Definiu (ex.: cobertura total, plano de QA, revisão contra o enunciado) | Executou e reportou o resultado |
+| Validação final | Testou manualmente a aplicação | Rodou builds, testes e verificações |
+
+### O que o processo encontrou
+
+As revisões em checkpoint e contra o enunciado pegaram problemas que uma geração direta de código teria deixado passar:
+
+- datas diferentes entre a resposta do `POST` e a do `GET` (precisão em memória × no banco);
+- uma transição de estado que alterava a entidade antes de validar a entrada;
+- um header malformado que resultava em `500` em vez de `400`;
+- um ciclo de dependência entre pacotes, detectado pelo ArchUnit;
+- a justificativa dos índices, pedida no README e registrada só no design.
+
+Cada decisão está registrada com contexto, alternativas e consequências, e eu posso explicar e defender qualquer uma delas.
