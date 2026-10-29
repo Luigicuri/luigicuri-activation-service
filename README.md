@@ -74,17 +74,23 @@ Os componentes e quem fala com quem:
 
 ```mermaid
 flowchart LR
-    C["Sistema consumidor"] -- "1. token" --> A["Servidor OAuth2<br/>emite JWT"]
-    C -- "2. POST / GET + JWT" --> API
+    C["Sistema consumidor"]
+    A["Servidor OAuth2<br/>emite JWT"]
     subgraph S["Activation Service"]
+        direction TB
         API["API REST<br/>JWT, escopos, limite por cliente"]
         W["Worker<br/>SKIP LOCKED, retry, circuit breaker"]
     end
-    API -- "grava e lê" --> DB[("PostgreSQL<br/>a tabela é a fila")]
-    W -- "pega pendentes, grava resultado" --> DB
-    W -- "ativa com Idempotency-Key" --> P["Provedor externo"]
-    API -. "spans" .-> J["Jaeger"]
-    W -. "spans" .-> J
+    DB[("PostgreSQL<br/>a tabela é a fila")]
+    P["Provedor externo<br/>Idempotency-Key"]
+    J["Jaeger<br/>traces via OTLP"]
+    C -- "1. token" --> A
+    C -- "2. POST / GET" --> API
+    API --> DB
+    W <--> DB
+    W --> P
+    API -.-> J
+    W -.-> J
 ```
 
 O `POST` só grava a solicitação como `PENDING` e responde na hora. Um worker agendado pega as pendentes, chama o provedor e grava o resultado:
