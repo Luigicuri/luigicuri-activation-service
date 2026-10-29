@@ -203,6 +203,7 @@ A classificação HTTP → `ProviderResult` fica isolada no `provider/` e é tes
 | Corpo acima de 16 KB | 413 | `payload-too-large` |
 | Sem token / token inválido | 401 | `unauthorized` (via `AuthenticationEntryPoint`) |
 | Escopo insuficiente | 403 | `forbidden` (via `AccessDeniedHandler`) |
+| Banco indisponível (`CannotCreateTransactionException`, `DataAccessResourceFailureException`) | 503 + `Retry-After: 5` | `service-unavailable`; `hikari.connection-timeout` = 3 s |
 | Qualquer outra exceção | 500 | `internal-error`, mensagem genérica, stack trace só no log |
 
 O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é devolvido no header `X-Correlation-Id`.

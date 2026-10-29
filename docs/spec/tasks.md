@@ -51,3 +51,4 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T6.2 `scheduleRetry` valida a entrada antes de alterar o estado (mesmo padrão da correção em `fail`) — R6.2
 - [x] T6.3 Gauge `activation.requests.active` com o tamanho atual da fila por status, base dos alertas de fila parada + testes — R9.3
 - [x] T6.4 Log da criação sob o `traceId` do chamador e ordem estável dos erros de validação (campo, mensagem) + testes — R9.2, R7.2
+- [x] T6.5 Banco indisponível responde `503` com `Retry-After` em ~3 s (timeout do pool reduzido) + testes — R7.5

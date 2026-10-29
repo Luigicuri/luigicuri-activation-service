@@ -5,6 +5,9 @@ spring:
     url: ${DB_URL:jdbc:postgresql://localhost:5432/activation}
     username: ${DB_USERNAME:activation}
     password: ${DB_PASSWORD:activation}
+    hikari:
+      # Fail fast when the database is down (the API answers 503) instead of holding the caller for 30 s
+      connection-timeout: ${DB_CONNECTION_TIMEOUT_MS:3000}
   jpa:
     open-in-view: false
     hibernate:

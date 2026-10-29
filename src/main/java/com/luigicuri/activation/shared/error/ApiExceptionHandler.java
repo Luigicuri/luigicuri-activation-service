@@ -6,6 +6,7 @@ import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.TypeMismatchException;
+import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpStatusCode;
@@ -13,6 +14,7 @@ import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.web.firewall.RequestRejectedException;
+import org.springframework.transaction.CannotCreateTransactionException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.PathVariable;
@@ -34,6 +36,8 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
+    static final String RETRY_AFTER_SECONDS = "5";
+
     private static final Comparator<FieldViolation> VIOLATION_ORDER = Comparator
             .comparing(FieldViolation::field)
             .thenComparing(FieldViolation::message, Comparator.nullsFirst(Comparator.naturalOrder()));
@@ -53,6 +57,20 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     ResponseEntity<Object> handleRejected(RequestRejectedException ex) {
         return respond(Problems.of(HttpStatus.BAD_REQUEST, "malformed-request", "Malformed request",
                 "The request contains characters that are not allowed."));
+    }
+
+    /**
+     * No database connection within the pool's connection-timeout. The outage is temporary and not the
+     * client's fault, so 503 with Retry-After tells it to come back, instead of a generic 500.
+     */
+    @ExceptionHandler({CannotCreateTransactionException.class, DataAccessResourceFailureException.class})
+    ResponseEntity<Object> handleDatabaseUnavailable(Exception ex) {
+        log.error("Database unavailable", ex);
+        var problem = Problems.of(HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", "Service unavailable",
+                "The service is temporarily unavailable. Try again in a few seconds.");
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
+                .body(problem);
     }
 
     @ExceptionHandler(Exception.class)
