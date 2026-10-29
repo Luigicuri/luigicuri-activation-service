@@ -52,7 +52,7 @@ curl -i -X POST localhost:18080/api/v1/requests \
 curl -s localhost:18080/api/v1/requests/<id> -H "Authorization: Bearer $TOKEN"
 ```
 
-O provedor simulado responde conforme o `productCode`: `INVALID-PRODUCT` é recusado (400), `UNAVAILABLE-PRODUCT` fica indisponível (503 com `Retry-After`) e `SLOW-PRODUCT` passa do timeout. Qualquer outro é ativado.
+O provedor simulado responde conforme o `productCode`: `INVALID-PRODUCT` é recusado (400), `UNAVAILABLE-PRODUCT` fica indisponível (503 com `Retry-After`) e `SLOW-PRODUCT` passa do timeout. Qualquer outro é ativado. Depois de falhas seguidas (por exemplo, com `UNAVAILABLE-PRODUCT`), o circuit breaker pausa as chamadas por 30 s: uma solicitação nova criada nesse intervalo fica `PENDING` um pouco mais e é concluída em seguida.
 
 > As portas ficam na faixa 18xxx porque, no Windows, a faixa 8069–8268 costuma estar reservada pelo Hyper-V. Dá para trocá-las com `APP_PORT`, `MANAGEMENT_PORT`, `PROVIDER_PORT`, `AUTH_PORT` e `JAEGER_PORT`.
 

@@ -382,7 +382,7 @@
                 "type": "text/javascript",
                 "exec": [
                   "const body = pm.response.json();",
-                  "pm.test('PENDING enquanto tenta de novo; FAILED apos ~30 s', () => pm.expect(['PENDING', 'FAILED']).to.include(body.status));"
+                  "pm.test('PENDING enquanto tenta de novo; FAILED apos ~1min30', () => pm.expect(['PENDING', 'FAILED']).to.include(body.status));"
                 ]
               }
             }
