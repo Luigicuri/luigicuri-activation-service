@@ -101,9 +101,9 @@ CREATE TABLE activation_request (
 | `uk_activation_request_external_id` (único) | R4 | Garantia de unicidade. Também atende a busca por `externalId` no fluxo de repetição |
 | `ix_ar_pending_due (next_attempt_at) WHERE status = 'PENDING'` | worker | Parcial: indexa só a fila, que é pequena. Os registros finais (a maioria) ficam fora |
 | `ix_ar_processing_lease (processing_started_at) WHERE status = 'PROCESSING'` | reconciliação | Mesmo raciocínio: só os registros em andamento |
-| `ix_ar_client_created (client_id, created_at DESC)` | R3 sem filtro | Toda listagem é por dono (R8.4). Ordenação já resolvida pelo índice |
+| `ix_ar_client_created (client_id, created_at DESC)` | R3 sem filtro | Toda listagem é por dono (R8.4). O índice entrega as linhas já ordenadas por data; o `id`, que só desempata registros do mesmo milissegundo, é resolvido com *incremental sort* sobre poucas linhas |
 | `ix_ar_client_status_created (client_id, status, created_at DESC)` | R3 com `status` | Igualdade em `client_id` e `status`, depois ordenação |
-| `ix_ar_client_customer_created (client_id, customer_id, created_at DESC)` | R3 com `customerId` | Idem. Com ambos os filtros, este é usado e `status` é filtrado no resultado (`customerId` é mais seletivo) |
+| `ix_ar_client_customer_created (client_id, customer_id, created_at DESC)` | R3 com `customerId` | Idem. Com os dois filtros, a expectativa é que o planejador escolha este (`customerId` costuma ser mais seletivo) e filtre o `status` no resultado; a escolha final depende das estatísticas e deve ser confirmada com `EXPLAIN` sobre dados reais |
 
 ## 5. Criação e duplicidade (R1, R4, ADR-0002)
 
@@ -217,7 +217,7 @@ O `traceId` vem do MDC (preenchido pelo filtro de correlação) e também é dev
 - **Autorização:** `POST` exige `SCOPE_activation:write`. `GET` exige `SCOPE_activation:read`.
 - **Dono:** claim `client_id` (RFC 9068), com fallback para `azp` e depois `sub`. Gravado em `client_id` na criação e aplicado como filtro em toda consulta (`findByIdAndClientId`).
 - **Ambiente local:** o `docker-compose` inclui `mock-oauth2-server` (navikt), que emite tokens reais via client credentials. Nos testes, o `jwt()` do `spring-security-test` dispensa servidor.
-- **Credencial do provedor:** variável de ambiente injetada a partir de um cofre de segredos (Azure Key Vault / AWS Secrets Manager) em produção. A rotação é descrita no README.
+- **Credencial do provedor:** variável de ambiente injetada a partir de um cofre de segredos (Azure Key Vault / AWS Secrets Manager) em produção. A rotação é feita no cofre, com duas credenciais válidas durante a janela de troca e reinício gradual das instâncias (ou recarga via Spring Cloud); a credencial nunca é registrada em log. A evolução natural é usar OAuth client credentials também na chamada ao provedor.
 
 ## 9. Observabilidade (R9)
 

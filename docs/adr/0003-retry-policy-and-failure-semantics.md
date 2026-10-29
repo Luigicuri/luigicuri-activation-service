@@ -32,4 +32,4 @@ O provedor pode responder com sucesso, com erro definitivo (o pedido é inválid
 - (+) Os retries sobrevivem a reinícios e são distribuídos entre as instâncias.
 - (−) Depende de o provedor honrar a `Idempotency-Key`. Esse contrato precisa estar acordado com ele.
 - (−) Com a credencial recusada, as solicitações ficam `PENDING` até a correção. Isso exige alerta sobre a métrica `credentials_rejected` e sobre o tamanho da fila (`activation.requests.active{status=PENDING}`).
-- (−) `FAILED` por limite de tentativas exige ação operacional (alerta e reprocessamento manual). Isso fica como melhoria futura no README.
+- (−) `FAILED` por limite de tentativas exige ação operacional (alerta e reprocessamento manual). A evolução é um endpoint administrativo de reprocessamento, com escopo próprio e auditoria.

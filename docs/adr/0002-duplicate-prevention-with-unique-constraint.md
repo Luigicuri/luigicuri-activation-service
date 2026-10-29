@@ -29,4 +29,4 @@ Verificar se existe e depois inserir não resolve. Duas transações concorrente
 - (+) Correto com qualquer número de instâncias e sob qualquer concorrência.
 - (+) O caso comum (`externalId` novo) custa um único `INSERT`.
 - (−) O serviço de criação não pode ser `@Transactional` como um todo, porque a violação marca a transação como rollback-only. A releitura acontece fora dela.
-- (−) A unicidade é global. Se dois sistemas de origem diferentes puderem gerar o mesmo `externalId`, a constraint precisaria ser `(client_id, external_id)`. Essa evolução está registrada no README.
+- (−) A unicidade é global. Se dois sistemas de origem diferentes puderem gerar o mesmo `externalId`, a constraint precisaria ser `(client_id, external_id)`.
