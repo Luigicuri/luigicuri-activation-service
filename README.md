@@ -20,16 +20,83 @@ Serviço de ativação de produtos de clientes. Ele registra solicitações, per
 
 ## Sumário
 
-1. [Como executar](#como-executar)
-2. [API](#api)
-3. [Decisões técnicas](#decisões-técnicas)
-4. [Estratégia de testes](#estratégia-de-testes)
-5. [Cenário de análise (item 10)](#cenário-de-análise-item-10)
-6. [Produção](#produção)
-7. [Microsserviços e cloud](#microsserviços-e-cloud)
-8. [Pontos pendentes](#pontos-pendentes)
-9. [Melhorias futuras](#melhorias-futuras)
-10. [Uso de IA](#uso-de-ia)
+1. [Arquitetura](#arquitetura)
+2. [Como executar](#como-executar)
+3. [API](#api)
+4. [Decisões técnicas](#decisões-técnicas)
+5. [Estratégia de testes](#estratégia-de-testes)
+6. [Cenário de análise (item 10)](#cenário-de-análise-item-10)
+7. [Produção](#produção)
+8. [Microsserviços e cloud](#microsserviços-e-cloud)
+9. [Pontos pendentes](#pontos-pendentes)
+10. [Melhorias futuras](#melhorias-futuras)
+11. [Uso de IA](#uso-de-ia)
+
+---
+
+## Arquitetura
+
+### Componentes
+
+```mermaid
+flowchart LR
+    C["Sistema consumidor<br/>(client credentials)"]
+    A["Servidor OAuth2<br/>emite JWT (JWKS)"]
+    subgraph S["Activation Service"]
+        API["API REST<br/>valida JWT e corpo<br/>grava PENDING"]
+        W["Worker<br/>SKIP LOCKED, retry, lease<br/>reconciliação"]
+    end
+    DB[("PostgreSQL<br/>UNIQUE(external_id)<br/>a tabela é a fila")]
+    P["Provedor externo<br/>Idempotency-Key = id"]
+
+    C -- "1. obtém token" --> A
+    C -- "2. POST / GET (Bearer)" --> API
+    API -. "valida assinatura (JWKS)" .-> A
+    API -- "3. INSERT / SELECT" --> DB
+    W -- "4. claim · 6. resultado" --> DB
+    W -- "5. ativa (HTTP)" --> P
+```
+
+A API e o worker nunca se chamam diretamente: eles se comunicam pelo banco. A API só grava e lê; o worker busca o trabalho pendente, chama o provedor e grava o resultado. Por isso a solução funciona com qualquer número de instâncias, sem estado em memória compartilhado e sem broker adicional ([ADR-0001](docs/adr/0001-async-processing-with-table-as-queue.md)).
+
+### Fluxo de uma solicitação
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant C as Consumidor
+    participant API as API
+    participant DB as PostgreSQL
+    participant W as Worker
+    participant P as Provedor
+
+    C->>API: POST /api/v1/requests (JWT)
+    API->>DB: TX curta: INSERT PENDING
+    Note over API,DB: externalId repetido: mesmo conteúdo → 200, diferente → 409
+    API-->>C: 201 Created + Location (sem esperar o provedor)
+
+    loop a cada 1 s, até 10 por lote
+        W->>DB: TX 1: SELECT ... FOR UPDATE SKIP LOCKED
+        W->>DB: marca PROCESSING (attempts+1), commit
+        W->>P: POST /activate (fora de transação)
+        P-->>W: 2xx / 4xx / 5xx / timeout
+        W->>DB: TX 2: COMPLETED, FAILED ou PENDING + nextAttemptAt
+    end
+    Note over W,DB: PROCESSING há mais de 2 min (instância caiu) → reconciliação devolve para PENDING
+
+    C->>API: GET /api/v1/requests/{id}
+    API->>DB: SELECT (só registros do próprio client_id)
+    API-->>C: 200 com o status atual
+```
+
+Pontos do desenho:
+
+- **Resposta rápida:** o `POST` só grava e responde. A latência do provedor não afeta o consumidor.
+- **Nenhuma transação aberta durante a chamada HTTP:** o claim (TX 1) e a gravação do resultado (TX 2) são curtos. Um provedor lento não segura conexões do pool nem locks.
+- **Falhas:** 2xx → `COMPLETED`; demais 4xx → `FAILED`; 408, 429, 5xx e timeout → nova tentativa (429 e 503 respeitam `Retry-After`) com backoff exponencial e jitter, até 5 tentativas ([ADR-0003](docs/adr/0003-retry-policy-and-failure-semantics.md)).
+- **Entrega *at-least-once*:** se a instância cair no meio, a reconciliação devolve o registro para a fila. A `Idempotency-Key` evita ativação duplicada no provedor.
+
+O detalhamento de cada etapa está em [docs/spec/design.md](docs/spec/design.md).
 
 ---
 
