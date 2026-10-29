@@ -107,6 +107,39 @@ class ActivationRequestTest {
             assertThat(request.getAttempts()).isEqualTo(1);
             assertThat(request.getProcessingStartedAt()).isNull();
         }
+
+        @Test
+        void retryWithoutTimeIsRejectedBeforeChangingState() {
+            var request = newRequest();
+            request.startProcessing(T1);
+
+            assertThatThrownBy(() -> request.scheduleRetry(null, T1)).isInstanceOf(NullPointerException.class);
+            assertThat(request.getStatus()).isEqualTo(ActivationStatus.PROCESSING);
+        }
+
+        @Test
+        void processingBackToPendingOnPostponeGivesTheAttemptBack() {
+            var request = newRequest();
+            request.startProcessing(T1);
+            var nextAttempt = T1.plus(Duration.ofMinutes(1));
+
+            request.postpone(nextAttempt, T1);
+
+            assertThat(request.getStatus()).isEqualTo(ActivationStatus.PENDING);
+            assertThat(request.getNextAttemptAt()).isEqualTo(nextAttempt);
+            assertThat(request.getAttempts()).isZero();
+            assertThat(request.getProcessingStartedAt()).isNull();
+        }
+
+        @Test
+        void postponeWithoutTimeIsRejectedBeforeChangingState() {
+            var request = newRequest();
+            request.startProcessing(T1);
+
+            assertThatThrownBy(() -> request.postpone(null, T1)).isInstanceOf(NullPointerException.class);
+            assertThat(request.getStatus()).isEqualTo(ActivationStatus.PROCESSING);
+            assertThat(request.getAttempts()).isEqualTo(1);
+        }
     }
 
     @DisplayName("R6.2 invalid transitions are rejected")
@@ -133,6 +166,7 @@ class ActivationRequestTest {
         Consumer<ActivationRequest> complete = r -> r.complete(T1);
         Consumer<ActivationRequest> fail = r -> r.fail("boom", T1);
         Consumer<ActivationRequest> retry = r -> r.scheduleRetry(T1, T1);
+        Consumer<ActivationRequest> postpone = r -> r.postpone(T1, T1);
 
         return Stream.of(
                 Arguments.of("PENDING -> COMPLETED", pending, complete),
@@ -144,7 +178,10 @@ class ActivationRequestTest {
                 Arguments.of("COMPLETED -> PENDING (retry)", completed, retry),
                 Arguments.of("FAILED -> PROCESSING", failed, start),
                 Arguments.of("FAILED -> COMPLETED", failed, complete),
-                Arguments.of("FAILED -> PENDING (retry)", failed, retry));
+                Arguments.of("FAILED -> PENDING (retry)", failed, retry),
+                Arguments.of("PENDING -> PENDING (postpone)", pending, postpone),
+                Arguments.of("COMPLETED -> PENDING (postpone)", completed, postpone),
+                Arguments.of("FAILED -> PENDING (postpone)", failed, postpone));
     }
 
     @Test

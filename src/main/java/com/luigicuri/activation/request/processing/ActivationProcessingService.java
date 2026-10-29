@@ -73,6 +73,12 @@ public class ActivationProcessingService {
             }
             case ProviderResult.TransientFailure failure ->
                     retryOrFail(request, failure.reason(), failure.retryAfter(), now);
+            case ProviderResult.CredentialsRejected rejected -> {
+                var nextAttemptAt = now.plus(properties.credentialsRejectedDelay());
+                request.postpone(nextAttemptAt, now);
+                log.error("{}: request {} postponed to {} without using an attempt. Check PROVIDER_API_KEY.",
+                        rejected.reason(), request.getId(), nextAttemptAt);
+            }
         }
         countTransition(request);
     }

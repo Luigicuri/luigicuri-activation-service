@@ -21,7 +21,7 @@ import jakarta.persistence.Version;
  * A request to activate a product for a customer.
  *
  * <p>Status only changes through the transition methods below, which reject anything outside
- * {@code PENDING -> PROCESSING -> COMPLETED | FAILED} and {@code PROCESSING -> PENDING} (retry).
+ * {@code PENDING -> PROCESSING -> COMPLETED | FAILED} and {@code PROCESSING -> PENDING} (retry or postpone).
  * There are no setters on purpose.
  */
 @Entity
@@ -112,9 +112,25 @@ public class ActivationRequest {
 
     /** Transient failure: back to the queue, eligible again at {@code nextAttemptAt}. */
     public void scheduleRetry(Instant nextAttemptAt, Instant now) {
+        Objects.requireNonNull(nextAttemptAt, "a retry needs a time");
         requireStatus(PROCESSING, PENDING);
         status = PENDING;
-        this.nextAttemptAt = Objects.requireNonNull(nextAttemptAt);
+        this.nextAttemptAt = nextAttemptAt;
+        processingStartedAt = null;
+        updatedAt = now;
+    }
+
+    /**
+     * The call never reached the merits of the request (the provider rejected our credentials): back to
+     * the queue without counting the attempt, so a configuration problem cannot exhaust the attempt limit.
+     * Returning to the previous attempt number is safe: the claim being undone made the only call with it.
+     */
+    public void postpone(Instant nextAttemptAt, Instant now) {
+        Objects.requireNonNull(nextAttemptAt, "a postponed request needs a time");
+        requireStatus(PROCESSING, PENDING);
+        status = PENDING;
+        attempts--;
+        this.nextAttemptAt = nextAttemptAt;
         processingStartedAt = null;
         updatedAt = now;
     }

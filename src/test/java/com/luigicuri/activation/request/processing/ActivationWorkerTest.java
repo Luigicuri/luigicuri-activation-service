@@ -88,6 +88,18 @@ class ActivationWorkerTest {
     }
 
     @Test
+    void rejectedCredentialsAreTimedSeparately() {
+        given(processingService.claimDue()).willReturn(List.of(first));
+        given(providerClient.activate(any()))
+                .willReturn(new ProviderResult.CredentialsRejected("Provider rejected our credentials (HTTP 401)"));
+
+        worker.processDueRequests();
+
+        assertThat(meterRegistry.timer("activation.provider.calls", "outcome", "credentials_rejected").count())
+                .isEqualTo(1);
+    }
+
+    @Test
     void correlationIdOfTheCreatingRequestIsUsedDuringTheCallAndClearedAfterwards() {
         var traceDuringCall = new AtomicReference<String>();
         given(processingService.claimDue()).willReturn(List.of(first));

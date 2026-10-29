@@ -25,6 +25,9 @@ final class ProviderResponses {
             return new ProviderResult.TransientFailure("Provider returned HTTP " + code,
                     parseRetryAfter(headers.getFirst(HttpHeaders.RETRY_AFTER), now));
         }
+        if (code == 401 || code == 403) {
+            return new ProviderResult.CredentialsRejected("Provider rejected our credentials (HTTP " + code + ")");
+        }
         if (code == 408 || status.is5xxServerError()) {
             return new ProviderResult.TransientFailure("Provider returned HTTP " + code, Optional.empty());
         }

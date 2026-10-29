@@ -32,10 +32,17 @@ class ProviderResponsesTest {
     }
 
     @ParameterizedTest(name = "HTTP {0} -> permanent failure")
-    @ValueSource(ints = {400, 401, 403, 404, 409, 422})
+    @ValueSource(ints = {400, 404, 409, 422})
     void clientErrorsArePermanent(int status) {
         assertThat(classify(status)).isEqualTo(
                 new ProviderResult.PermanentFailure("Provider rejected the request (HTTP " + status + ")"));
+    }
+
+    @ParameterizedTest(name = "HTTP {0} -> our credentials were rejected, not the request")
+    @ValueSource(ints = {401, 403})
+    void authenticationErrorsAreNotBlamedOnTheRequest(int status) {
+        assertThat(classify(status)).isEqualTo(
+                new ProviderResult.CredentialsRejected("Provider rejected our credentials (HTTP " + status + ")"));
     }
 
     @ParameterizedTest(name = "HTTP {0} -> transient failure")

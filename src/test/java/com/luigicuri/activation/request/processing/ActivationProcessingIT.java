@@ -191,6 +191,38 @@ class ActivationProcessingIT {
     }
 
     @Test
+    @DisplayName("401 -> our credential is wrong: postponed without using attempts, never FAILED; completes once fixed")
+    void rejectedCredentialsNeverFailTheRequest() {
+        provider.stubFor(post(ACTIVATE).willReturn(aResponse().withStatus(401)));
+        var request = pendingRequest("EXT-401");
+
+        worker.processDueRequests();
+
+        var postponed = reload(request);
+        assertThat(postponed.getStatus()).isEqualTo(ActivationStatus.PENDING);
+        assertThat(postponed.getAttempts()).isZero();
+        assertThat(postponed.getFailureReason()).isNull();
+        assertThat(postponed.getNextAttemptAt())
+                .isCloseTo(postponed.getUpdatedAt().plus(Duration.ofMinutes(1)), within(1, ChronoUnit.SECONDS));
+
+        // More rejections than max-attempts (3) still leave the request waiting for the credential fix
+        for (int call = 2; call <= 4; call++) {
+            makeEveryRequestDue();
+            worker.processDueRequests();
+        }
+        assertThat(reload(request).getStatus()).isEqualTo(ActivationStatus.PENDING);
+
+        provider.stubFor(post(ACTIVATE).willReturn(aResponse().withStatus(200)));
+        makeEveryRequestDue();
+        worker.processDueRequests();
+
+        var completed = reload(request);
+        assertThat(completed.getStatus()).isEqualTo(ActivationStatus.COMPLETED);
+        assertThat(completed.getAttempts()).isEqualTo(1);
+        provider.verify(5, callsFor(request));
+    }
+
+    @Test
     @DisplayName("R5.8 SKIP LOCKED: rows locked by one worker are skipped by another, not waited for")
     void concurrentWorkersNeverClaimTheSameRequest() throws Exception {
         for (int i = 0; i < 6; i++) {

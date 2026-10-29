@@ -17,4 +17,11 @@ public sealed interface ProviderResult {
     /** Failure that may go away. {@code retryAfter} is set when the provider says when to come back. */
     record TransientFailure(String reason, Optional<Duration> retryAfter) implements ProviderResult {
     }
+
+    /**
+     * The provider refused our credentials (401/403). The problem is on this side, not in the request:
+     * failing the request would be wrong, and retrying it cannot help until the credential is fixed.
+     */
+    record CredentialsRejected(String reason) implements ProviderResult {
+    }
 }

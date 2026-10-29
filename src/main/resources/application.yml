@@ -90,6 +90,8 @@ activation:
     # Must exceed batch-size x (connect-timeout + read-timeout), or a slow batch would be reclaimed mid-flight
     lease-timeout: 2m
     reconciliation-interval: 30s
+    # Provider answered 401/403: our credential is wrong, not the request. Postpone without using attempts.
+    credentials-rejected-delay: 1m
   retry:
     max-attempts: 5
     initial-delay: 2s

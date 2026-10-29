@@ -73,6 +73,7 @@ public class ActivationWorker {
             case ProviderResult.Success success -> "success";
             case ProviderResult.PermanentFailure failure -> "permanent_failure";
             case ProviderResult.TransientFailure failure -> "transient_failure";
+            case ProviderResult.CredentialsRejected rejected -> "credentials_rejected";
         };
     }
 }
