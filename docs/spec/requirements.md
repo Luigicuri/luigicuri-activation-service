@@ -86,7 +86,7 @@ Legenda de origem: **[O]** obrigatório no enunciado · **[D]** diferencial no e
 - **R7.2** Erros de validação incluem `errors: [{field, message}]`, em ordem estável (por campo e mensagem).
 - **R7.3** Erro inesperado → `500` com mensagem genérica. Nenhum stack trace, nome de classe ou SQL é exposto. O detalhe vai para o log com o mesmo `traceId`.
 - **R7.4** Erros de integração não chegam ao consumidor da API como erro HTTP, já que o processamento é assíncrono. Eles ficam refletidos no status (`FAILED` com `failureReason`) e nos logs e métricas.
-- **R7.5** Banco de dados indisponível → `503` com `Retry-After`, em poucos segundos (timeout curto do pool), em vez de `500` após 30 s.
+- **R7.5** Banco de dados indisponível → `503` com `Retry-After`, em poucos segundos (timeout curto do pool), em vez de `500` após 30 s. O mesmo vale quando as chaves do servidor de autenticação estão inacessíveis: nenhum token pode ser validado, e a resposta é `503`, não um `401` que culparia o token do cliente.
 
 ## R8 — Segurança [O: descrever · D: implementar]
 

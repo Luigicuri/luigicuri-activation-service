@@ -18,7 +18,16 @@ public final class Problems {
 
     public static final String BASE_URI = "https://api.luigicuri.dev/problems/";
 
+    /** Seconds a client should wait before retrying after a 503. */
+    public static final String RETRY_AFTER_SECONDS = "5";
+
     private Problems() {
+    }
+
+    /** A dependency of ours (database, token keys) is unreachable: temporary, and not the client's fault. */
+    public static ProblemDetail serviceUnavailable() {
+        return of(HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", "Service unavailable",
+                "The service is temporarily unavailable. Try again in a few seconds.");
     }
 
     public static ProblemDetail of(HttpStatus status, String slug, String title, String detail) {

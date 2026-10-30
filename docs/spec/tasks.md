@@ -56,3 +56,4 @@ Ordem de implementação. Cada tarefa vira um ou mais commits pequenos que citam
 - [x] T6.7 Tracing distribuído com OpenTelemetry e Jaeger; o trace atravessa a etapa assíncrona via `traceparent` persistido; `correlationId` separado do `traceId` + testes — R9.2
 - [x] T6.8 Circuit breaker (Resilience4j) em volta do provedor, sem gastar tentativas com o circuito aberto + testes — R5.9
 - [x] T6.9 Limite de chamadas por sistema consumidor (Resilience4j RateLimiter), `429` com `Retry-After` + testes — R8.5
+- [x] T6.10 Chaves do servidor de autenticação inacessíveis respondem `503` com `Retry-After`, em vez de exceção não tratada e `401` em `/error` + testes — R7.5

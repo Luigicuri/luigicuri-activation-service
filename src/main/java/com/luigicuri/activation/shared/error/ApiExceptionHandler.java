@@ -36,8 +36,6 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
 
     private static final Logger log = LoggerFactory.getLogger(ApiExceptionHandler.class);
 
-    static final String RETRY_AFTER_SECONDS = "5";
-
     private static final Comparator<FieldViolation> VIOLATION_ORDER = Comparator
             .comparing(FieldViolation::field)
             .thenComparing(FieldViolation::message, Comparator.nullsFirst(Comparator.naturalOrder()));
@@ -66,11 +64,9 @@ public class ApiExceptionHandler extends ResponseEntityExceptionHandler {
     @ExceptionHandler({CannotCreateTransactionException.class, DataAccessResourceFailureException.class})
     ResponseEntity<Object> handleDatabaseUnavailable(Exception ex) {
         log.error("Database unavailable", ex);
-        var problem = Problems.of(HttpStatus.SERVICE_UNAVAILABLE, "service-unavailable", "Service unavailable",
-                "The service is temporarily unavailable. Try again in a few seconds.");
         return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
-                .header(HttpHeaders.RETRY_AFTER, RETRY_AFTER_SECONDS)
-                .body(problem);
+                .header(HttpHeaders.RETRY_AFTER, Problems.RETRY_AFTER_SECONDS)
+                .body(Problems.serviceUnavailable());
     }
 
     @ExceptionHandler(Exception.class)

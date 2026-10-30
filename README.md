@@ -69,7 +69,7 @@ O provedor simulado responde conforme o `productCode`: `INVALID-PRODUCT` é recu
 | `GET` | `/api/v1/requests/{id}` | `activation:read` | `200` · `404` |
 | `GET` | `/api/v1/requests?status=&customerId=&page=&size=` | `activation:read` | `200` paginado · `400` |
 
-Os três campos são obrigatórios, com 1 a 64 caracteres: letras, números, `.`, `_` ou `-`. Datas em UTC (ISO-8601). Qualquer rota pode responder `401`, `403`, `429` (limite de chamadas) ou `503` (banco indisponível).
+Os três campos são obrigatórios, com 1 a 64 caracteres: letras, números, `.`, `_` ou `-`. Datas em UTC (ISO-8601). Qualquer rota pode responder `401`, `403`, `429` (limite de chamadas) ou `503` com `Retry-After` (banco ou servidor de autenticação indisponível).
 
 Os erros seguem o RFC 9457 (`application/problem+json`) e trazem o `traceId`, que leva ao trace no Jaeger e aos logs, e o `correlationId`, que o sistema consumidor pode enviar no header `X-Correlation-Id`.
 

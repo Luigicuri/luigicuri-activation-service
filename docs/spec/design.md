@@ -208,6 +208,7 @@ A classificação HTTP → `ProviderResult` fica isolada no `provider/` e é tes
 | Sem token / token inválido | 401 | `unauthorized` (via `AuthenticationEntryPoint`) |
 | Escopo insuficiente | 403 | `forbidden` (via `AccessDeniedHandler`) |
 | Banco indisponível (`CannotCreateTransactionException`, `DataAccessResourceFailureException`) | 503 + `Retry-After: 5` | `service-unavailable`; `hikari.connection-timeout` = 3 s |
+| Chaves do emissor inacessíveis (JWKS) | 503 + `Retry-After: 5` | `service-unavailable`; failure handler no filtro de bearer token e decoder que converte a falha de inicialização em `JwtException` |
 | Qualquer outra exceção | 500 | `internal-error`, mensagem genérica, stack trace só no log |
 
 Todo problema traz o `correlationId` (do filtro de correlação, também devolvido no header `X-Correlation-Id`) e, quando a requisição está sendo rastreada, o `traceId` do OpenTelemetry.

@@ -8,9 +8,14 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.ObjectPostProcessor;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtDecoderInitializationException;
+import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.AuthorizationFilter;
 import org.springframework.security.web.firewall.RequestRejectedHandler;
@@ -35,8 +40,8 @@ public class SecurityConfiguration {
 
     @Bean
     SecurityFilterChain apiSecurity(HttpSecurity http, ObjectMapper objectMapper, CurrentClient currentClient,
-                                    RateLimiterRegistry rateLimiters, RateLimitProperties rateLimit)
-            throws Exception {
+                                    RateLimiterRegistry rateLimiters, RateLimitProperties rateLimit,
+                                    JwtDecoder jwtDecoder) throws Exception {
         var problemHandler = new SecurityProblemHandler(objectMapper);
         // After authorization: only calls that would be served count against the client's limit
         var rateLimitFilter = new ClientRateLimitFilter(rateLimiters, currentClient, objectMapper, rateLimit);
@@ -54,14 +59,38 @@ public class SecurityConfiguration {
                         .hasAuthority(SCOPE_READ)
                         .anyRequest().authenticated())
                 .oauth2ResourceServer(resourceServer -> resourceServer
-                        .jwt(jwt -> { })
+                        .jwt(jwt -> jwt.decoder(outageAware(jwtDecoder)))
                         .authenticationEntryPoint(problemHandler)
-                        .accessDeniedHandler(problemHandler))
+                        .accessDeniedHandler(problemHandler)
+                        // Unreachable issuer keys become a 503 instead of an exception the filter rethrows
+                        .withObjectPostProcessor(new ObjectPostProcessor<BearerTokenAuthenticationFilter>() {
+                            @Override
+                            public <O extends BearerTokenAuthenticationFilter> O postProcess(O filter) {
+                                filter.setAuthenticationFailureHandler(problemHandler);
+                                return filter;
+                            }
+                        }))
                 .exceptionHandling(exceptions -> exceptions
                         .authenticationEntryPoint(problemHandler)
                         .accessDeniedHandler(problemHandler))
                 .addFilterAfter(rateLimitFilter, AuthorizationFilter.class)
                 .build();
+    }
+
+    /**
+     * With only an issuer configured, the decoder is built on first use and fetches the issuer's keys then.
+     * If they are unreachable it throws {@link JwtDecoderInitializationException}, which Spring Security does
+     * not translate and which would escape the filter chain. As a {@link JwtException} it is reported as an
+     * authentication service failure, answered with 503 like any other unreachable dependency (R7.5).
+     */
+    static JwtDecoder outageAware(JwtDecoder delegate) {
+        return token -> {
+            try {
+                return delegate.decode(token);
+            } catch (JwtDecoderInitializationException e) {
+                throw new JwtException("The issuer's keys are unavailable: " + e.getMessage(), e);
+            }
+        };
     }
 
     /** One limiter per client id, created on first use; non-blocking, so an excess call is refused at once. */
