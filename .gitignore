@@ -17,3 +17,7 @@ Thumbs.db
 ### Local env ###
 .env
 *.log
+
+### Demo recording (docs/demo/record.js) ###
+node_modules/
+docs/demo/video/
