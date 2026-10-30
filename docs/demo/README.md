@@ -1,6 +1,6 @@
 # Demonstração em vídeo
 
-[`demonstracao-activation-service.webm`](demonstracao-activation-service.webm) (2 min) mostra cinco cenários executados pelo Swagger UI, com a stack do `docker compose`:
+[`demonstracao-activation-service.webm`](https://github.com/Luigicuri/luigicuri-activation-service/raw/main/docs/demo/demonstracao-activation-service.webm) (2 min, 4 MB; o link baixa o arquivo, que abre em qualquer navegador) mostra cinco cenários executados pelo Swagger UI, com a stack do `docker compose`:
 
 1. Login OAuth 2.0, criação (`201`, `PENDING`) e consulta (`COMPLETED` cerca de 1 s depois)
 2. Duplicidade: reenvio idêntico (`200`, mesmo `id`) e mesmo `externalId` com outro produto (`409`)
