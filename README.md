@@ -9,7 +9,7 @@ Este README resume as decisões. Os detalhes estão em:
 - [`docs/spec`](docs/spec): requisitos, design e plano de tarefas;
 - [`docs/adr`](docs/adr): as quatro decisões principais, com as alternativas que descartei;
 - [`docs/guias`](docs/guias): Manual do Desenvolvedor, Guia de QA e guias de uso pelo Swagger e pelo Postman (PDF);
-- [`docs/demo`](docs/demo): demonstração em vídeo (2 min) de cinco cenários pelo Swagger UI, gravada por script.
+- [`docs/demo`](docs/demo): demonstração em vídeo (2 min) de cinco cenários pelo Swagger UI;
 
 <a href="https://github.com/Luigicuri/luigicuri-activation-service/raw/main/docs/demo/demonstracao-activation-service.webm"><img src="docs/demo/capa.png" width="480" alt="Demonstração em vídeo: cinco cenários pelo Swagger UI"></a>
 
